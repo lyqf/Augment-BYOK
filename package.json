@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "build:vsix": "node tools/build/build-vsix.js",
-    "upstream:analyze": "node tools/build/upstream-analyze.js"
+    "upstream:analyze": "node tools/build/upstream-analyze.js",
+    "report:coverage": "node tools/report/endpoint-coverage.js --analysis .cache/reports/upstream-analysis.json --out dist/endpoint-coverage.report.md --fail-fast"
   }
 }
-

@@ -7,6 +7,7 @@ const { normalizeEndpoint, normalizeString, safeTransform, emptyAsyncGenerator }
 const { openAiCompleteText, openAiStreamTextDeltas } = require("./providers/openai");
 const { anthropicCompleteText, anthropicStreamTextDeltas } = require("./providers/anthropic");
 const { joinBaseUrl, safeFetch, readTextLimit } = require("./providers/http");
+const { getOfficialConnection } = require("./official");
 const {
   buildMessagesForEndpoint,
   makeBackChatResult,
@@ -128,8 +129,10 @@ async function maybeHandleCallApi({ requestId, endpoint, body, transform, timeou
   if (ep === "/get-models") {
     const byokModels = buildByokModelsFromConfig(cfg);
     try {
-      const completionURL = upstreamConfig && typeof upstreamConfig === "object" ? normalizeString(upstreamConfig.completionURL) : "";
-      const upstream = await fetchOfficialGetModels({ completionURL, apiToken: upstreamApiToken, timeoutMs: Math.min(12000, t), abortSignal });
+      const off = getOfficialConnection();
+      const completionURL = (upstreamConfig && typeof upstreamConfig === "object" ? normalizeString(upstreamConfig.completionURL) : "") || off.completionURL;
+      const apiToken = normalizeString(upstreamApiToken) || off.apiToken;
+      const upstream = await fetchOfficialGetModels({ completionURL, apiToken, timeoutMs: Math.min(12000, t), abortSignal });
       const merged = mergeModels(upstream, byokModels);
       return safeTransform(transform, merged, ep);
     } catch (err) {

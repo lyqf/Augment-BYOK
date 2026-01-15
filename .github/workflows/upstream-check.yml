@@ -34,16 +34,22 @@ jobs:
       - name: Upstream analyze
         run: node tools/build/upstream-analyze.js
 
+      - name: Endpoint coverage (LLM fail-fast)
+        run: node tools/report/endpoint-coverage.js --analysis .cache/reports/upstream-analysis.json --out dist/endpoint-coverage.report.md --fail-fast
+
       - name: Upload Analysis Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: upstream-analysis
           path: |
             .cache/reports/upstream-analysis.json
+            dist/endpoint-coverage.report.md
             dist/upstream.lock.json
             upstream.lock.json
 
       - name: Create PR if upstream changed
+        if: always()
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "chore: bump upstream"
@@ -56,4 +62,3 @@ jobs:
           delete-branch: true
           add-paths: |
             upstream.lock.json
-

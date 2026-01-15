@@ -11,6 +11,7 @@ const { downloadFile } = require("../lib/http");
 
 const { patchAugmentInterceptorInject } = require("../patch/patch-augment-interceptor-inject");
 const { patchExtensionEntry } = require("../patch/patch-extension-entry");
+const { patchOfficialOverrides } = require("../patch/patch-official-overrides");
 const { patchCallApiShim } = require("../patch/patch-callapi-shim");
 const { patchPackageJsonCommands } = require("../patch/patch-package-json-commands");
 const { guardNoAutoAuth } = require("../patch/guard-no-autoauth");
@@ -67,6 +68,9 @@ async function main() {
 
   console.log(`[build] patch entry bootstrap`);
   patchExtensionEntry(extJsPath);
+
+  console.log(`[build] patch official (completionURL/apiToken from env/config)`);
+  patchOfficialOverrides(extJsPath);
 
   console.log(`[build] patch callApi/callApiStream shim`);
   patchCallApiShim(extJsPath);

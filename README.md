@@ -7,7 +7,7 @@
 ## 核心约束（不可谈判）
 
 - Augment 后端是**自定义协议**（必须对齐 `/chat-stream` 等行为）。
-- Augment 可用 `completionURL` + `apiToken`，但 BYOK **不允许依赖/污染 settings**（尤其禁止 `augment.advanced.chat*` 这类扩展设置面）。
+- Augment 可用 `completionURL` + `apiToken`，但 BYOK **不允许依赖/污染 settings**（通过 env/config 注入 official 值；尤其禁止 `augment.advanced.chat*` 这类扩展设置面）。
 - BYOK 仅支持：OpenAI / Anthropic。
 - Key 仅来自**环境变量**（不走 VS Code settings / secrets）。
 - 必须注入 `AugmentBYOK/references/Augment-BYOK-Proxy/vsix-patch/inject-code.txt`（新版本会在 `vendor/` 保留同内容副本，便于自包含构建）。

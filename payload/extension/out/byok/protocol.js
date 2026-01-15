@@ -1,105 +1,30 @@
 "use strict";
 
 const { normalizeString, randomId } = require("./util");
-
-function fmtBlock(label, v) {
-  const s = normalizeString(v);
-  if (!s) return "";
-  return `${label}:\n${s}`;
-}
-
-function fmtCodeBlock(label, v) {
-  const s = typeof v === "string" ? v : "";
-  if (!s) return "";
-  return `${label}:\n\`\`\`\n${s}\n\`\`\``;
-}
-
-function formatChatHistory(v, { maxItems = 12 } = {}) {
-  const items = Array.isArray(v) ? v.slice(-maxItems) : [];
-  const lines = [];
-  for (const it of items) {
-    if (!it || typeof it !== "object") continue;
-    const role = normalizeString(it.role || it.sender || it.type) || "unknown";
-    const text = normalizeString(it.text || it.content || it.message);
-    if (!text) continue;
-    lines.push(`${role}: ${text}`);
-  }
-  return lines.join("\n").trim();
-}
+const { buildChatPrompt } = require("./prompts/chat");
+const { buildPromptEnhancerPrompt } = require("./prompts/prompt-enhancer");
+const { buildCompletionPrompt } = require("./prompts/completion");
+const { buildChatInputCompletionPrompt } = require("./prompts/chat-input-completion");
+const { buildEditPrompt } = require("./prompts/edit");
+const { buildInstructionStreamPrompt } = require("./prompts/instruction-stream");
+const { buildSmartPasteStreamPrompt } = require("./prompts/smart-paste-stream");
+const { buildCommitMessageStreamPrompt } = require("./prompts/commit-message-stream");
+const { buildConversationTitlePrompt } = require("./prompts/conversation-title");
+const { buildNextEditStreamPrompt } = require("./prompts/next-edit-stream");
 
 function buildMessagesForEndpoint(endpoint, body) {
   const ep = normalizeString(endpoint);
-  const b = body && typeof body === "object" ? body : {};
-
-  const userGuidelines = normalizeString(b.user_guidelines ?? b.userGuidelines);
-  const workspaceGuidelines = normalizeString(b.workspace_guidelines ?? b.workspaceGuidelines);
-  const rules = Array.isArray(b.rules) ? b.rules.map((x) => String(x)).join("\n") : normalizeString(b.rules);
-  const chatHistory = formatChatHistory(b.chat_history ?? b.chatHistory);
-
-  const prefix = typeof b.prefix === "string" ? b.prefix : "";
-  const selectedText = typeof b.selected_text === "string" ? b.selected_text : (typeof b.selected_code === "string" ? b.selected_code : "");
-  const suffix = typeof b.suffix === "string" ? b.suffix : "";
-
-  const instruction = normalizeString(b.instruction);
-  const message = normalizeString(b.message);
-  const prompt = normalizeString(b.prompt);
-
-  const commonSystem = [fmtBlock("User Guidelines", userGuidelines), fmtBlock("Workspace Guidelines", workspaceGuidelines), fmtBlock("Rules", rules)].filter(Boolean).join("\n\n");
-  const commonUser = [fmtBlock("Chat History", chatHistory), fmtBlock("Message", message || prompt || instruction), fmtCodeBlock("Code (prefix+selection+suffix)", `${prefix}${selectedText}${suffix}`)].filter(Boolean).join("\n\n");
-
-  if (ep === "/completion" || ep === "/chat-input-completion") {
-    const sys = "You are a code completion engine. Output ONLY the completion text. No explanations.";
-    const u = [
-      fmtBlock("Language", b.lang),
-      fmtCodeBlock("Prompt", normalizeString(b.prompt)),
-      fmtCodeBlock("Suffix", typeof b.suffix === "string" ? b.suffix : ""),
-      fmtBlock("Path", b.path)
-    ].filter(Boolean).join("\n\n");
-    return { system: sys, messages: [{ role: "user", content: u || commonUser }] };
-  }
-
-  if (ep === "/edit" || ep === "/instruction-stream" || ep === "/smart-paste-stream") {
-    const sys = "You are a code editor. Apply the instruction to the selected code. Output ONLY the replacement code. No markdown, no explanations.";
-    const u = [
-      fmtBlock("Instruction", b.instruction),
-      fmtCodeBlock("Prefix", prefix),
-      fmtCodeBlock("Selected", selectedText),
-      fmtCodeBlock("Suffix", suffix),
-      fmtBlock("Language", b.lang),
-      fmtBlock("Path", b.path)
-    ].filter(Boolean).join("\n\n");
-    return { system: sys, messages: [{ role: "user", content: u || commonUser }] };
-  }
-
-  if (ep === "/generate-commit-message-stream") {
-    const sys = "You are a senior engineer. Generate ONE concise git commit message. Output ONLY the subject line.";
-    const u = [fmtCodeBlock("Diff", b.diff), fmtBlock("Changed File Stats", JSON.stringify(b.changed_file_stats || {}, null, 2))].filter(Boolean).join("\n\n");
-    return { system: sys, messages: [{ role: "user", content: u || "diff is empty" }] };
-  }
-
-  if (ep === "/generate-conversation-title") {
-    const sys = "Generate a short, specific conversation title (<= 8 words). Output ONLY the title.";
-    const u = [fmtBlock("Chat History", chatHistory)].filter(Boolean).join("\n\n");
-    return { system: sys, messages: [{ role: "user", content: u || commonUser }] };
-  }
-
-  if (ep === "/next-edit-stream") {
-    const sys = "You propose the next code edit. Output ONLY the replacement code for the selected range. No markdown.";
-    const u = [
-      fmtBlock("Instruction", b.instruction),
-      fmtBlock("Path", b.path),
-      fmtBlock("Language", b.lang),
-      fmtCodeBlock("Prefix", prefix),
-      fmtCodeBlock("Selected", selectedText),
-      fmtCodeBlock("Suffix", suffix)
-    ].filter(Boolean).join("\n\n");
-    return { system: sys, messages: [{ role: "user", content: u || commonUser }] };
-  }
-
-  // chat / chat-stream / prompt-enhancer / fallback
-  const sys = commonSystem || "You are a helpful coding assistant.";
-  const u = commonUser || fmtBlock("Message", message || prompt || instruction) || "Hello";
-  return { system: sys, messages: [{ role: "user", content: u }] };
+  if (ep === "/completion") return buildCompletionPrompt(body);
+  if (ep === "/chat-input-completion") return buildChatInputCompletionPrompt(body);
+  if (ep === "/edit") return buildEditPrompt(body);
+  if (ep === "/instruction-stream") return buildInstructionStreamPrompt(body);
+  if (ep === "/smart-paste-stream") return buildSmartPasteStreamPrompt(body);
+  if (ep === "/generate-commit-message-stream") return buildCommitMessageStreamPrompt(body);
+  if (ep === "/generate-conversation-title") return buildConversationTitlePrompt(body);
+  if (ep === "/next-edit-stream") return buildNextEditStreamPrompt(body);
+  if (ep === "/prompt-enhancer") return buildPromptEnhancerPrompt(body);
+  if (ep === "/chat" || ep === "/chat-stream") return buildChatPrompt(ep, body);
+  return buildChatPrompt(ep, body);
 }
 
 function makeBackChatResult(text, { nodes, includeNodes = true } = {}) {

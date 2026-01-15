@@ -25,14 +25,23 @@ jobs:
       - name: Build VSIX
         run: node tools/build/build-vsix.js
 
+      - name: Upstream analyze
+        run: node tools/build/upstream-analyze.js
+
+      - name: Endpoint coverage (LLM fail-fast)
+        run: node tools/report/endpoint-coverage.js --analysis .cache/reports/upstream-analysis.json --out dist/endpoint-coverage.report.md --fail-fast
+
       - name: Upload Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: augment-byok-vsix
           path: |
             dist/*.vsix
+            dist/endpoint-coverage.report.md
             dist/upstream.lock.json
             upstream.lock.json
+            .cache/reports/upstream-analysis.json
 
       - name: Publish Rolling Release
         uses: ncipollo/release-action@v1
@@ -44,6 +53,6 @@ jobs:
           replacesArtifacts: true
           artifacts: |
             dist/*.vsix
+            dist/endpoint-coverage.report.md
             dist/upstream.lock.json
             upstream.lock.json
-

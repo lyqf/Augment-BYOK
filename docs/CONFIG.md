@@ -11,6 +11,8 @@
 ## 2. 环境变量（建议）
 
 - `AUGMENT_BYOK_CONFIG`：配置文件路径（默认建议 `~/.augment-byok/config.yaml`）
+- `AUGMENT_BYOK_OFFICIAL_COMPLETION_URL`：Augment 官方 completionURL（替代/覆盖 VS Code settings：`augment.advanced.completionURL`）
+- `AUGMENT_BYOK_OFFICIAL_API_TOKEN`：Augment 官方 apiToken（替代/覆盖 VS Code settings：`augment.advanced.apiToken`）
 - `OPENAI_API_KEY`：OpenAI Key（示例）
 - `ANTHROPIC_API_KEY`：Anthropic Key（示例）
 
@@ -20,6 +22,8 @@
 ## 3. 配置文件示例（YAML）
 
 见：`Augment-BYOK/config.example.yaml`
+
+补充：`official.*` 只存“env 变量名 / 非敏感 URL”，敏感 token 永远放 env（不落盘）。
 
 ## 4. 关键约定
 

@@ -11,6 +11,11 @@ function defaultConfig() {
   return {
     version: 1,
     enabled: false,
+    official: {
+      completionUrl: "",
+      completionUrlEnv: "AUGMENT_BYOK_OFFICIAL_COMPLETION_URL",
+      apiTokenEnv: "AUGMENT_BYOK_OFFICIAL_API_TOKEN"
+    },
     providers: [],
     routing: { defaultMode: "official", rules: {}, modelMap: {}, defaultProviderId: "" },
     timeouts: { upstreamMs: 120000 },
@@ -173,6 +178,14 @@ function normalizeConfig(raw) {
   const enabled = get(raw, ["enabled"]);
   if (typeof enabled === "boolean") out.enabled = enabled;
 
+  const official = get(raw, ["official"]);
+  const completionUrl = normalizeString(get(official, ["completion_url", "completionUrl"]));
+  if (completionUrl) out.official.completionUrl = completionUrl;
+  const completionUrlEnv = normalizeString(get(official, ["completion_url_env", "completionUrlEnv"]));
+  if (completionUrlEnv) out.official.completionUrlEnv = completionUrlEnv;
+  const apiTokenEnv = normalizeString(get(official, ["api_token_env", "apiTokenEnv"]));
+  if (apiTokenEnv) out.official.apiTokenEnv = apiTokenEnv;
+
   const timeouts = get(raw, ["timeouts"]);
   const upstreamMs = get(timeouts, ["upstream_ms", "upstreamMs"]);
   if (Number.isFinite(Number(upstreamMs)) && Number(upstreamMs) > 0) out.timeouts.upstreamMs = Number(upstreamMs);
@@ -321,4 +334,3 @@ function createConfigManager(opts) {
 }
 
 module.exports = { defaultConfig, normalizeConfig, parseConfigText, resolveConfigPathFromEnv, createConfigManager, ConfigManager };
-

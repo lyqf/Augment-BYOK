@@ -5,6 +5,15 @@
 version: 1
 enabled: true
 
+# official（Augment 原生后端）
+# - 用于 non-LLM 端点的 official 路由
+# - 同时也用于 BYOK 的 /get-models 合并（拉取官方 models）
+# - 建议把 token 放在 env，不落盘
+official:
+  completion_url_env: AUGMENT_BYOK_OFFICIAL_COMPLETION_URL
+  api_token_env: AUGMENT_BYOK_OFFICIAL_API_TOKEN
+  # completion_url: https://api.augmentcode.com/
+
 providers:
   - id: openai
     type: openai_compatible

@@ -3,8 +3,8 @@
 结论：上游 `augment.vscode-augment@0.744.0` 在扩展侧共引用 **71 个端点**，其中“可由 LLM 直接替代的数据面端点”是 **13 个**（其余多为控制面/遥测/集成能力，不能用纯 LLM 取代）。
 
 数据来源：
-- `AugmentBYOK/.cache/reports/upstream-analysis.json`（端点全集）
-- `AugmentBYOK/.cache/reports/endpoint-coverage.report.md`（LLM 端点=13 的统计与 call kind）
+- `Augment-BYOK/.cache/reports/upstream-analysis.json`（端点全集）
+- `Augment-BYOK/dist/endpoint-coverage.report.md`（LLM 端点=13 的统计与 call kind / 输入输出形状）
 
 ## 1) LLM 数据面（BYOK 需要全部覆盖）
 
