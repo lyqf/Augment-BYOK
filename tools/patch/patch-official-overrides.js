@@ -47,10 +47,10 @@ function injectOnceAfterLiteral(src, needle, injection, label) {
 
 function patchClientAuthGetters(src) {
   const injectApiToken =
-    `try{if(!this.auth||!this.auth.useOAuth){const __byok_off=require("./byok/config/official").getOfficialConnection();if(__byok_off.apiToken)return __byok_off.apiToken}}catch{}` +
+    `try{const __byok_off=require("./byok/config/official").getOfficialConnection();if(__byok_off.apiToken)return __byok_off.apiToken}catch{}` +
     ``;
   const injectCompletionURL =
-    `try{if(!this.auth||!this.auth.useOAuth){const __byok_off=require("./byok/config/official").getOfficialConnection();if(__byok_off.apiToken&&__byok_off.completionURL)return __byok_off.completionURL}}catch{}` +
+    `try{const __byok_off=require("./byok/config/official").getOfficialConnection();if(__byok_off.apiToken&&__byok_off.completionURL)return __byok_off.completionURL}catch{}` +
     ``;
 
   let out = src;
@@ -91,6 +91,89 @@ function patchConfigListenerNormalizeConfig(src) {
   const res = replaceAllOrThrow(src, re, replacement, "configListener normalizeConfig ignore settings apiToken/completionURL");
   if (res.count !== 1) throw new Error(`patch failed: normalizeConfig match count unexpected (${res.count})`);
   return res.out;
+}
+
+function patchAuthenticatedCallUrlJoin(src) {
+  let out = src;
+
+  const repl = `new URL((typeof t==="string"&&t[0]==="/")?t.slice(1):t,`;
+
+  const res1 = replaceAllOrThrow(out, /new URL\(t,a\)/g, `${repl}a)`, "makeAuthenticatedCall preserve base path");
+  if (res1.count !== 1) throw new Error(`patch failed: makeAuthenticatedCall match count unexpected (${res1.count})`);
+  out = res1.out;
+
+  const res2 = replaceAllOrThrow(out, /new URL\(t,c\.tenantUrl\)/g, `${repl}c.tenantUrl)`, "makeAuthenticatedCallStream preserve base path");
+  if (res2.count !== 1) throw new Error(`patch failed: makeAuthenticatedCallStream match count unexpected (${res2.count})`);
+  out = res2.out;
+
+  return out;
+}
+
+function patchAuthenticatedCallDisabledEndpoints(src) {
+  let out = src;
+
+  const unaryInjection =
+    `try{` +
+    `const __byok_state=require("./byok/config/state");` +
+    `const __byok_cfg=__byok_state.ensureConfigManager().get();` +
+    `const __byok_rules=__byok_cfg&&__byok_cfg.routing&&__byok_cfg.routing.rules;` +
+    `const __byok_ep=typeof t==="string"?t:"";` +
+    `const __byok_norm=__byok_ep&&__byok_ep[0]==="/" ? __byok_ep : "/"+__byok_ep;` +
+    `const __byok_r=__byok_rules&&__byok_rules[__byok_norm];` +
+    `if(__byok_r&&__byok_r.mode==="disabled")return {};` +
+    `}catch{}` +
+    ``;
+
+  out = injectOnceAfterLiteral(out, `async makeAuthenticatedCall(t,r,n,i="POST",o){`, unaryInjection, "makeAuthenticatedCall disabled endpoints");
+
+  const streamInjection =
+    `try{` +
+    `const __byok_state=require("./byok/config/state");` +
+    `const __byok_cfg=__byok_state.ensureConfigManager().get();` +
+    `const __byok_rules=__byok_cfg&&__byok_cfg.routing&&__byok_cfg.routing.rules;` +
+    `const __byok_ep=typeof t==="string"?t:"";` +
+    `const __byok_norm=__byok_ep&&__byok_ep[0]==="/" ? __byok_ep : "/"+__byok_ep;` +
+    `const __byok_r=__byok_rules&&__byok_rules[__byok_norm];` +
+    `if(__byok_r&&__byok_r.mode==="disabled")return(async function*(){})();` +
+    `}catch{}` +
+    ``;
+
+  out = injectOnceAfterLiteral(out, `async makeAuthenticatedCallStream(t,r,n,i="post",o){`, streamInjection, "makeAuthenticatedCallStream disabled endpoints");
+
+  return out;
+}
+
+function patchAuthenticatedCallErrorMessages(src) {
+  let out = src;
+
+  const res1 = replaceAllOrThrow(
+    out,
+    /throw new st\(`API call failed: \$\{d\.statusText\}`,Xe\.Internal\)/g,
+    "throw new st(`API call failed: ${d.status} ${d.statusText} (${l.toString()})`,Xe.Internal)",
+    "makeAuthenticatedCall error message include url"
+  );
+  if (res1.count !== 1) throw new Error(`patch failed: makeAuthenticatedCall error message match count unexpected (${res1.count})`);
+  out = res1.out;
+
+  const res2 = replaceAllOrThrow(
+    out,
+    /throw new st\(`API call failed: \$\{f\.statusText\}`,Xe\.Internal\)/g,
+    "throw new st(`API call failed: ${f.status} ${f.statusText} (${u.toString()})`,Xe.Internal)",
+    "makeAuthenticatedCallStream error message include url"
+  );
+  if (res2.count !== 1) throw new Error(`patch failed: makeAuthenticatedCallStream error message match count unexpected (${res2.count})`);
+  out = res2.out;
+
+  const res3 = replaceAllOrThrow(
+    out,
+    /throw new st\(`API call failed: \$\{h\.statusText\}`,Xe\.Internal\)/g,
+    "throw new st(`API call failed: ${h.status} ${h.statusText} (${u.toString()})`,Xe.Internal)",
+    "makeAuthenticatedCallStream retry error message include url"
+  );
+  if (res3.count !== 1) throw new Error(`patch failed: makeAuthenticatedCallStream retry error message match count unexpected (${res3.count})`);
+  out = res3.out;
+
+  return out;
 }
 
 function patchCallApiBaseUrlAndToken(src) {
@@ -147,6 +230,9 @@ function patchOfficialOverrides(filePath) {
   let next = original;
   next = patchClientAuthGetters(next);
   next = patchConfigListenerNormalizeConfig(next);
+  next = patchAuthenticatedCallUrlJoin(next);
+  next = patchAuthenticatedCallDisabledEndpoints(next);
+  next = patchAuthenticatedCallErrorMessages(next);
 
   const apiRes = patchCallApiBaseUrlAndToken(next);
   next = apiRes.out;

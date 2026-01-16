@@ -86,6 +86,10 @@ function defaultConfig() {
         "/generate-conversation-title": { mode: "byok" },
         "/next_edit_loc": { mode: "byok" },
 
+        "/user-secrets/list": { mode: "disabled" },
+        "/user-secrets/upsert": { mode: "disabled" },
+        "/user-secrets/delete": { mode: "disabled" },
+
         "/client-metrics": { mode: "disabled" },
         "/client-completion-timelines": { mode: "disabled" },
         "/record-preference-sample": { mode: "disabled" },
