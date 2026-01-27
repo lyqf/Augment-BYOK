@@ -14,6 +14,8 @@ const { patchCallApiShim } = require("../patch/patch-callapi-shim");
 const { patchExposeUpstream } = require("../patch/patch-expose-upstream");
 const { patchModelPickerByokOnly } = require("../patch/patch-model-picker-byok-only");
 const { patchPackageJsonCommands } = require("../patch/patch-package-json-commands");
+const { patchWebviewToolUseFallback } = require("../patch/patch-webview-tooluse-fallback");
+const { patchWebviewHistorySummaryNode } = require("../patch/patch-webview-history-summary-node");
 const { guardNoAutoAuth } = require("../patch/guard-no-autoauth");
 
 function makeLogger(prefix) {
@@ -42,6 +44,12 @@ function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, intercep
   const payloadDir = path.join(root, "payload", "extension");
   if (!fs.existsSync(payloadDir)) throw new Error(`payload missing: ${rel(payloadDir)}`);
   copyDir(payloadDir, extDir);
+
+  log(`patch webview assets (tool cards fallback)`);
+  patchWebviewToolUseFallback(extDir);
+
+  log(`patch webview assets (history summary node slimming)`);
+  patchWebviewHistorySummaryNode(extDir);
 
   log(`patch package.json (commands)`);
   patchPackageJsonCommands(pkg);

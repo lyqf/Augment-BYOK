@@ -3,6 +3,9 @@
 新版本的构建期补丁面严格限制在（按执行顺序）：
 
 - 注入 `vendor/augment-interceptor/inject-code.augment-interceptor.v1.2.txt`（按你的硬性要求）。
+- patch webview assets（上游 bundle 外科式替换）：
+  - 工具卡片历史回放兜底：避免重启后历史 turn 的工具区域不渲染
+  - History Summary 节点瘦身：避免压缩后进入可编辑历史触发 stringify/clone 爆炸导致 VSIX 崩溃
 - 注入 BYOK bootstrap（运行时初始化、配置热更新、回滚开关）。
 - 暴露上游少量内部对象到 `globalThis`（仅用于 Self Test 覆盖“真实工具执行”）。
 - 注入 official 覆盖（从 `globalState` 配置注入 completionURL/apiToken，避免依赖 VS Code settings）。
@@ -12,6 +15,8 @@
 
 对应脚本：
 - `tools/patch/patch-augment-interceptor-inject.js`
+- `tools/patch/patch-webview-tooluse-fallback.js`
+- `tools/patch/patch-webview-history-summary-node.js`
 - `tools/patch/patch-extension-entry.js`
 - `tools/patch/patch-expose-upstream.js`
 - `tools/patch/patch-official-overrides.js`
