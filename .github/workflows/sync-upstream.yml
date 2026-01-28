@@ -1,0 +1,31 @@
+name: Sync Fork from Upstream
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # 每 6 小时同步一次（UTC 时间）
+  workflow_dispatch:        # 允许手动点按钮触发
+
+permissions:
+  contents: write           # 允许推送到你的 fork
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout your fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/AnkRoot/Augment-BYOK.git
+          git remote -v
+
+      - name: Sync main from upstream/main
+        run: |
+          git checkout main
+          git fetch upstream main
+          git merge --no-edit upstream/main
+          git push origin main
