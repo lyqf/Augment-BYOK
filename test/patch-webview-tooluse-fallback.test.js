@@ -35,7 +35,7 @@ function makeFixture() {
     // ungrouped tool list (enableGroupedTools=false path)
     'T=a((()=>fe(e(E),"$displayableToolUseNodes",o).map((i=>i.tool_use)).filter((i=>!!i))));',
     // tool card state gate ($toolUseState)
-    'function eo(n,t){const f=()=>fe(e(h),"$toolUseState",$)}',
+    'function eo(n,t){const o=1,f=()=>fe(e(h),"$toolUseState",$),k=1}',
     ""
   ].join("");
 }
@@ -58,6 +58,7 @@ test("patchWebviewToolUseFallback: patches tool list", () => {
     assert.ok(out.includes("t.toolUseNodes.map"), "ungrouped tool list fallback not applied");
     assert.ok(out.includes("__augment_byok_webview_tooluse_fallback_v1_ungrouped"), "ungrouped marker missing");
     assert.ok(out.includes("__byok_toolUseId"), "tool state fallback not applied");
+    assert.ok(out.includes("contentNodes:[]}}},k=1"), "tool state arrow function not closed before const decl");
     assert.ok(out.includes("__augment_byok_webview_tooluse_fallback_v1_tool_state"), "tool state marker missing");
   });
 });
