@@ -95,14 +95,16 @@ function buildFinalChatChunk({ nodeId, stopReasonSeen, stopReason, sawToolUse, e
   if (!Number.isFinite(nextId) || nextId < 0) nextId = 0;
 
   const clean = endedCleanly !== false;
-  const stop_reason =
-    stopReasonSeen && stopReason != null
+  let stop_reason = !clean
+    ? STOP_REASON_UNSPECIFIED
+    : stopReasonSeen && stopReason != null
       ? stopReason
-      : !clean
-        ? STOP_REASON_UNSPECIFIED
-        : sawToolUse
-          ? STOP_REASON_TOOL_USE_REQUESTED
-          : STOP_REASON_END_TURN;
+      : sawToolUse
+        ? STOP_REASON_TOOL_USE_REQUESTED
+        : STOP_REASON_END_TURN;
+
+  // 兼容：部分上游在返回工具调用时仍给出 STOP/END_TURN；此时应以工具调用为准。
+  if (clean && sawToolUse && stop_reason === STOP_REASON_END_TURN) stop_reason = STOP_REASON_TOOL_USE_REQUESTED;
   return { nodeId: nextId, chunk: makeBackChatChunk({ text: "", nodes: [], stop_reason }) };
 }
 

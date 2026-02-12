@@ -22,8 +22,8 @@ async function buildCtx({ provider, kind } = {}) {
     endpoint: ep,
     cfg: {},
     provider,
-    model: "gpt-4o-mini",
-    requestedModel: "gpt-4o-mini",
+    model: "gpt-5.3-codex",
+    requestedModel: "gpt-5.3-codex",
     body: { message: "hi" },
     timeoutMs: 1,
     abortSignal: null,
@@ -56,4 +56,28 @@ test("buildByokAugmentChatContext: respects gemini generationConfig.maxOutputTok
   });
   assert.deepEqual(ctx.requestDefaults.generationConfig, { maxOutputTokens: 99 });
   assert.equal(ctx.requestDefaults.max_output_tokens, undefined);
+});
+
+test("buildByokAugmentChatContext: auto max_output_tokens accounts for multibyte (CJK) prompts", async () => {
+  const provider = makeProvider({ type: "openai_compatible", requestDefaults: {} });
+  const big = "你".repeat(500000);
+
+  const ctx = await buildByokAugmentChatContext({
+    kind: "chat-stream",
+    endpoint: "/chat-stream",
+    cfg: {},
+    provider,
+    model: "gpt-5.3-codex",
+    requestedModel: "gpt-5.3-codex",
+    body: { message: big },
+    timeoutMs: 1,
+    abortSignal: null,
+    upstreamCompletionURL: "",
+    upstreamApiToken: "",
+    requestId: "r_big_cjk"
+  });
+
+  assert.ok(Number.isFinite(Number(ctx.requestDefaults.max_output_tokens)));
+  assert.ok(ctx.requestDefaults.max_output_tokens < 65536);
+  assert.ok(ctx.requestDefaults.max_output_tokens >= 256);
 });

@@ -13,25 +13,35 @@ test("provider-augment-chat: convertToolDefinitionsByProviderType returns provid
       name: "echo",
       description: "Echo text",
       input_schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }
+    },
+    {
+      name: "optional_fields",
+      description: "Has optional properties",
+      input_schema: {
+        type: "object",
+        properties: { required: { type: "string" }, optional: { type: "string" } },
+        required: ["required"]
+      }
     }
   ];
 
   const openAi = convertToolDefinitionsByProviderType("openai_compatible", toolDefs);
-  assert.equal(openAi.length, 1);
+  assert.equal(openAi.length, 2);
   assert.equal(openAi[0].type, "function");
   assert.equal(openAi[0].function.name, "echo");
 
   const responses = convertToolDefinitionsByProviderType("openai_responses", toolDefs);
-  assert.equal(responses.length, 1);
+  assert.equal(responses.length, 2);
   assert.equal(responses[0].type, "function");
   assert.equal(responses[0].name, "echo");
   assert.equal(responses[0].strict, true);
   assert.equal(responses[0].parameters.additionalProperties, false);
   assert.ok(Array.isArray(responses[0].parameters.required));
   assert.ok(responses[0].parameters.required.includes("text"));
+  assert.deepEqual(responses[1].parameters.required, ["required"]);
 
   const anthropic = convertToolDefinitionsByProviderType("anthropic", toolDefs);
-  assert.equal(anthropic.length, 1);
+  assert.equal(anthropic.length, 2);
   assert.equal(anthropic[0].name, "echo");
   assert.equal(anthropic[0].input_schema.type, "object");
 
@@ -39,6 +49,7 @@ test("provider-augment-chat: convertToolDefinitionsByProviderType returns provid
   assert.equal(gemini.length, 1);
   assert.ok(Array.isArray(gemini[0].functionDeclarations));
   assert.equal(gemini[0].functionDeclarations[0].name, "echo");
+  assert.equal(gemini[0].functionDeclarations[1].name, "optional_fields");
 });
 
 test("provider-augment-chat: unknown provider.type throws without network", async () => {
@@ -58,4 +69,3 @@ test("provider-augment-chat: unknown provider.type throws without network", asyn
     for await (const _ of gen) break;
   });
 });
-

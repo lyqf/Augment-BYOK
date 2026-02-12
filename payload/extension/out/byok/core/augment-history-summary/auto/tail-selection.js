@@ -7,7 +7,7 @@ const { REQUEST_NODE_TOOL_RESULT } = require("../../augment-protocol");
 
 const { asArray, pick, normalizeNodeType } = shared;
 
-const { estimateExchangeSizeChars } = require("./estimate");
+const { estimateExchangeSizeBytes } = require("./estimate");
 
 function nodeIsToolResult(n) {
   if (normalizeNodeType(n) !== REQUEST_NODE_TOOL_RESULT) return false;
@@ -19,30 +19,21 @@ function exchangeHasToolResults(h) {
   return exchangeRequestNodes(h).some(nodeIsToolResult);
 }
 
-function splitHistoryForSummary(history, tailSizeCharsToExclude, triggerOnHistorySizeChars, minTailExchanges) {
+function splitHistoryForSummary(history, tailSizeBytesToExclude, minTailExchanges) {
   const hs = asArray(history);
   if (!hs.length) return { head: [], tail: [] };
   const headRev = [];
   const tailRev = [];
-  let seenChars = 0;
-  let headChars = 0;
-  let tailChars = 0;
+  let seenBytes = 0;
   for (let i = hs.length - 1; i >= 0; i--) {
     const ex = hs[i];
-    const sz = estimateExchangeSizeChars(ex);
-    if (seenChars + sz < tailSizeCharsToExclude || tailRev.length < minTailExchanges) {
+    const sz = estimateExchangeSizeBytes(ex);
+    if (seenBytes + sz < tailSizeBytesToExclude || tailRev.length < minTailExchanges) {
       tailRev.push(ex);
-      tailChars += sz;
     } else {
       headRev.push(ex);
-      headChars += sz;
     }
-    seenChars += sz;
-  }
-  const totalChars = headChars + tailChars;
-  if (totalChars < triggerOnHistorySizeChars) {
-    const all = tailRev.concat(headRev).reverse();
-    return { head: [], tail: all };
+    seenBytes += sz;
   }
   headRev.reverse();
   tailRev.reverse();
@@ -61,17 +52,21 @@ function adjustTailToAvoidToolResultOrphans(original, tailStart) {
 }
 
 function computeTailSelection({ history, hs, decision }) {
-  const split = splitHistoryForSummary(history, decision.tailExcludeChars, decision.thresholdChars, hs.minTailExchanges);
+  const hist = asArray(history);
+  const split = splitHistoryForSummary(hist, decision.tailExcludeChars, hs.minTailExchanges);
   if (!split.head.length || !split.tail.length) return null;
+
+  let tailStart = -1;
   const splitBoundaryRequestId = normalizeString(split.tail[0]?.request_id);
-  if (!splitBoundaryRequestId) return null;
-  let tailStart = history.findIndex((h) => normalizeString(h?.request_id) === splitBoundaryRequestId);
-  if (tailStart < 0) tailStart = Math.max(0, history.length - split.tail.length);
-  tailStart = adjustTailToAvoidToolResultOrphans(history, tailStart);
-  const boundaryRequestId = normalizeString(history[tailStart]?.request_id);
-  if (!boundaryRequestId) return null;
-  const droppedHead = history.slice(0, tailStart);
-  const tail = history.slice(tailStart);
+  if (splitBoundaryRequestId) {
+    tailStart = hist.findIndex((h) => normalizeString(h?.request_id) === splitBoundaryRequestId);
+  }
+  if (tailStart < 0) tailStart = Math.max(0, hist.length - split.tail.length);
+
+  tailStart = adjustTailToAvoidToolResultOrphans(hist, tailStart);
+  const boundaryRequestId = normalizeString(hist[tailStart]?.request_id);
+  const droppedHead = hist.slice(0, tailStart);
+  const tail = hist.slice(tailStart);
   if (!droppedHead.length || !tail.length) return null;
   return { tailStart, boundaryRequestId, droppedHead, tail };
 }

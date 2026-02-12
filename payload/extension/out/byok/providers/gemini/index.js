@@ -126,12 +126,14 @@ async function* geminiChatStreamChunks({ baseUrl, apiKey, model, systemInstructi
   let fullText = "";
   let stopReason = null;
   let stopReasonSeen = false;
-  let sawToolUse = false;
   let usagePromptTokens = null;
   let usageCompletionTokens = null;
   let usageCacheReadInputTokens = null;
   let emittedChunks = 0;
   let toolSeq = 0;
+  const toolCallsById = new Map(); // tool_use_id -> { toolName, inputJson }
+  const toolCallOrder = [];
+  const toolCallIdsBySignature = new Map(); // `${toolName}\n${inputJson}` -> tool_use_id
 
   const sse = makeSseJsonIterator(resp, { doneData: "[DONE]" });
   for await (const { json } of sse.events) {
@@ -166,15 +168,25 @@ async function* geminiChatStreamChunks({ baseUrl, apiKey, model, systemInstructi
       if (fc) {
         const toolName = normalizeString(fc.name);
         if (!toolName) continue;
-        toolSeq += 1;
-        const toolUseId = `tool-${sanitizeToolHint(toolName)}-${toolSeq}`;
         const inputJson = normalizeFunctionCallArgsToJsonString(fc.args ?? fc.arguments);
-        const meta = getToolMeta(toolName);
-        const built = buildToolUseChunks({ nodeId, toolUseId, toolName, inputJson, meta, supportToolUseStart });
-        nodeId = built.nodeId;
-        emittedChunks += built.chunks.length;
-        for (const c of built.chunks) yield c;
-        if (built.chunks.length) sawToolUse = true;
+        let toolUseId = normalizeString(fc.id ?? fc.call_id ?? fc.callId ?? fc.tool_use_id ?? fc.toolUseId);
+        if (!toolUseId) {
+          const sig = `${toolName}\n${inputJson}`;
+          toolUseId = toolCallIdsBySignature.get(sig) || "";
+          if (!toolUseId) {
+            toolSeq += 1;
+            toolUseId = `tool-${sanitizeToolHint(toolName)}-${toolSeq}`;
+            toolCallIdsBySignature.set(sig, toolUseId);
+          }
+        }
+
+        if (!toolCallsById.has(toolUseId)) {
+          toolCallsById.set(toolUseId, { toolName, inputJson });
+          toolCallOrder.push(toolUseId);
+        } else {
+          // 兼容：部分网关会重复/累积发送同一个 functionCall；这里用“最新 args”覆盖。
+          toolCallsById.set(toolUseId, { toolName, inputJson });
+        }
       }
     }
 
@@ -187,6 +199,21 @@ async function* geminiChatStreamChunks({ baseUrl, apiKey, model, systemInstructi
         yield makeBackChatChunk({ text: diff.delta, nodes: [rawResponseNode({ id: nodeId, content: diff.delta })] });
       }
     }
+  }
+
+  let sawToolUse = false;
+  for (const toolUseId of toolCallOrder) {
+    const tc = toolCallsById.get(toolUseId);
+    if (!tc) continue;
+    const toolName = normalizeString(tc.toolName);
+    if (!toolName) continue;
+    const inputJson = normalizeString(tc.inputJson) || "{}";
+    const meta = getToolMeta(toolName);
+    const built = buildToolUseChunks({ nodeId, toolUseId, toolName, inputJson, meta, supportToolUseStart });
+    nodeId = built.nodeId;
+    emittedChunks += built.chunks.length;
+    for (const c of built.chunks) yield c;
+    if (built.chunks.length) sawToolUse = true;
   }
 
   const hasUsage = usagePromptTokens != null || usageCompletionTokens != null || usageCacheReadInputTokens != null;

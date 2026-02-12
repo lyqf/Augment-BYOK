@@ -1,18 +1,22 @@
 # Augment-BYOK（请尽快 PR 合并，避免跟不上本仓库）
 
-单一 VSIX：把 Augment 的 **13 个 LLM 数据面端点**按路由转到 BYOK（支持 Streaming），其它端点保持官方行为；支持运行时一键回滚（无需 Rust/外部服务）。
+单一 VSIX：把 Augment 的 **13 个 LLM 数据面端点**按路由转到 BYOK（支持 Streaming + tool use），其它端点保持官方行为；支持运行时一键回滚（无需 Rust/外部服务）。
 
 ## 安装（推荐：Releases）
 
 - GitHub Releases（tag：`rolling`）下载 `augment.vscode-augment.*.byok.vsix`
 - VS Code → Extensions → `...` → `Install from VSIX...` → Reload Window
 
-## 配置
+## 快速配置（面板）
 
-- `BYOK: Open Config Panel`：至少配置 1 个 `provider` → `Save`（Base URL 面板会按 type 自动填充默认值；`Official` token 可选：私有租户/官方上下文注入）
-- `Prompts`：可选，按 endpoint 追加 system prompt（仅影响 BYOK 上游模型；全局偏好用 Augment 的 User Guidelines；面板提供“一键填充（推荐）”模板）
-- `Self Test`：可选，一键验证 models / chat / chat-stream
-- 配置存 `globalState`（含 Key/Token）；字段/限制见 `docs/CONFIG.md`
+1. 运行 `BYOK: Open Config Panel`
+2. 至少配置 1 个 `providers[]` → `Save`（Base URL 会按 type 自动填充默认值）
+3. 运行 `BYOK: Enable`（`runtimeEnabled=true` 才会接管 13 个端点）
+4. 可选：在 Model Picker 选择 `byok:<providerId>:<modelId>`（由 `/get-models` 注入）
+
+配置存储：VS Code extension `globalState`（含 Key/Token；不参与 Sync）。字段与约束见 `docs/CONFIG.md`；示例见 `config.example.json`。
+
+可选：面板支持 `Prompts`（按 endpoint 追加 system prompt，仅 BYOK 生效）与 `Self Test`（一键验证 models/chat/chat-stream）。
 
 常用命令：
 - `BYOK: Enable` / `BYOK: Disable (Rollback)`
@@ -20,29 +24,44 @@
 - `BYOK: Import Config` / `BYOK: Export Config`
 - `BYOK: Clear History Summary Cache`
 
+## Provider 支持（4 类）
+
+- `openai_compatible`：`POST {baseUrl}/chat/completions`（SSE）
+- `openai_responses`：`POST {baseUrl}/responses`（SSE，支持 `incomplete_details.reason`→`stop_reason`）
+- `anthropic`：`POST {baseUrl}/messages`（SSE）
+- `gemini_ai_studio`：`.../v1beta/models/<model>:streamGenerateContent?alt=sse`
+
+协议适配细节（工具/stop_reason/用量/兜底/常见网关差异）见 `docs/PROVIDERS.md`。
+
+## 13 个端点（会被 BYOK shim 接管）
+
+- `callApi`（6）：`/get-models`、`/chat`、`/completion`、`/chat-input-completion`、`/edit`、`/next_edit_loc`
+- `callApiStream`（7）：`/chat-stream`、`/prompt-enhancer`、`/instruction-stream`、`/smart-paste-stream`、`/next-edit-stream`、`/generate-commit-message-stream`、`/generate-conversation-title`
+
+完整端点范围（71/13）见 `docs/ENDPOINTS.md`。
+
 ## 排障（高频）
 
 - 401/403：检查 `apiKey`/`headers`；不要把 `Bearer ` 前缀重复写入（`apiKey` 会自动加 Bearer，`headers.authorization` 则应完整填写）。
 - 404/HTML：`baseUrl` 很可能少了 `/v1`（OpenAI/Anthropic 兼容端点通常要求）。
-- Anthropic stream 422 `system: invalid type: string`：多见于“Anthropic 兼容代理”实现差异；已内置自动重试（`system`/`messages[].content` 的 blocks 兼容兜底）。如仍失败请确认 `baseUrl` 指向 `/messages` 且代理支持 SSE。
-- 响应结束后末尾文字显示不全：已增强兜底（减少最终 chunk 体积 + /responses done/completed 补齐）；如仍复现请提供 provider.type/baseUrl/endpoint 方便定位。
-- 流式无输出：确认你的服务支持 `text/event-stream`；建议直接在面板跑 `Self Test` 定位（models / chat / chat-stream）。
+- 流式无输出：确认上游支持 `text/event-stream`；建议直接在面板跑 `Self Test` 定位（models / chat / chat-stream）。
+- Anthropic stream 422 `system: invalid type: string`：多见于“Anthropic 兼容代理”实现差异；已内置 blocks 兼容兜底重试（仍失败时请确认 `baseUrl` 指向 `/messages` 且代理支持 SSE）。
 - BYOK 未生效：确认已 `Save`（热更新只影响后续请求）且 `BYOK: Enable`（runtimeEnabled=true）。
 
 ## 本地构建
 
-前置：Node.js 20+、Python 3、可访问 Marketplace  
-快速检查（不依赖上游缓存）：`npm run check:fast`  
-完整检查（需要缓存上游 VSIX）：`npm run upstream:analyze`（一次）→ `npm run check`  
-构建：`npm run build:vsix`（产物：`dist/augment.vscode-augment.<upstreamVersion>.byok.vsix`）
+前置：Node.js 20+、Python 3、可访问 Marketplace
 
-## 文档
+- 快速检查（不依赖上游缓存）：`npm run check:fast`
+- 完整检查（需要缓存上游 VSIX）：`npm run upstream:analyze`（一次）→ `npm run check`
+- 构建：`npm run build:vsix`（产物：`dist/augment.vscode-augment.<upstreamVersion>.byok.vsix`）
 
-- 索引：`docs/README.md`
-- 配置/路由：`docs/CONFIG.md`
-- 端点范围（71/13）：`docs/ENDPOINTS.md`
-- 架构/补丁面：`docs/ARCH.md`
-- CI/Release：`docs/CI.md`
+## 文档（索引）
+
+- `docs/CONFIG.md`：配置/路由/字段限制（单一真相）
+- `docs/PROVIDERS.md`：4 个 provider.type 的协议适配与兼容矩阵
+- `docs/ENDPOINTS.md`：端点范围（71/13）
+- `docs/ARCH.md`：架构/最小补丁面概览/开发约束（全量修改功能清单见下文）
 
 ## 全量修改功能（对上游 VSIX 的“全量改动面”清单）
 
@@ -232,15 +251,22 @@
 #### 4.9 historySummary（滚动摘要：上下文压缩）
 
 - [x] `historySummary.enabled`：默认 false（显式开启才生效）
-- [-] `historySummary.providerId/model`：可空（为空时会 fallback 到当前 provider/model）
+- [-] `historySummary.providerId/model`：可空（仅控制“摘要生成模型”；为空时 fallback 到当前 provider/model）
+- [x] 触发体积：`history + message + prefix/selected_code/suffix/diff`（UTF-8 bytes）
 - [x] 触发阈值：`triggerOnHistorySizeChars`（默认 800000）
-- [x] 触发策略：`triggerStrategy=auto|ratio|chars`
-- [x] 比例阈值：`triggerOnContextRatio` / `targetContextRatio`
-- [x] 上下文窗口估算：`contextWindowTokensDefault` / `contextWindowTokensOverrides`（支持按 model 名子串匹配 override）
-- [x] Tail 保留：`historyTailSizeCharsToExclude` + `minTailExchanges`
-- [x] 摘要生成上限：`maxTokens` / `timeoutSeconds` / `maxSummarizationInputChars`
+- [x] 触发策略：`triggerStrategy=auto|ratio|chars`（推荐 `auto`）
+- [x] 比例阈值：`triggerOnContextRatio` / `targetContextRatio`（默认约 0.70 / 0.55，触发阈值自动钳制在 0.60~0.80）
+- [x] 上下文窗口估算：`contextWindowTokensDefault` / `contextWindowTokensOverrides`（override：最长子串、大小写不敏感）
+- [x] 双模型解耦：触发窗口按当前对话模型判定；summary provider/model 仅用于“如何生成摘要”
+- [x] 常见 overrides：`gpt-5.3-codex=400000`、`gpt-5.2=400000`、`claude-4.6-opus=1000000`、`gemini-3-pro=1000000`、`kimi-k2=128000`
+- [x] Tail 保留：`historyTailSizeCharsToExclude`（按 UTF-8 bytes 估算）+ `minTailExchanges`
+- [x] 切分一致性：触发后不再被“仅 history 阈值”二次否决（避免触发但不注入）
+- [x] 摘要生成上限：`maxTokens` / `timeoutSeconds` / `maxSummarizationInputChars`（按 UTF-8 bytes 估算）
 - [x] rolling summary 缓存：`rollingSummary=true` + `cacheTtlMs`（对话维度缓存，减少重复 summarization）
+- [x] 刷新策略：仅“当前请求已含 summary node”才跳过；`chat_history` 含旧 summary 仍允许刷新
 - [x] 提供默认 supervisor prompt 模板：`summaryNodeRequestMessageTemplate` + `abridgedHistoryParams`
+- [x] 兜底：summary 生成失败/超时/未配置时，仍会注入 fallback summary 强制压缩（避免请求过大导致直接失败）
+- [x] 兜底：`end_part_full` 中的 `tool_result` / `tool_use input` 会中间截断（保留尾部引用 id），防止单个工具输出撑爆上下文
 
 ### 5) 端点覆盖（71 / 13）与路由策略
 
@@ -383,7 +409,7 @@
 - [x] 流式文本：解析 SSE `choices[0].delta.content`（doneData=`[DONE]`）
 - [x] chat-stream：把 SSE delta 转为 Augment `RAW_RESPONSE` 节点（逐 chunk）
 - [-] tool calls：支持 `delta.tool_calls[]` 与旧式 `delta.function_call`（自动聚合 arguments）
-- [-] 并行工具兜底：当 `supportParallelToolUse` 不为 true 时，自动注入 `parallel_tool_calls=false`
+- [x] 并行工具兜底：当 `supportParallelToolUse` 不为 true 且存在 tools 时，自动注入 `parallel_tool_calls=false`（并兼容 `parallelToolCalls`）
 - [-] tools 兼容降级链：tools → 关闭 include_usage → 关闭 tool_choice → minimal defaults → functions → no-tools
 - [-] vision/多段 content 兼容：不支持 multipart 的网关自动压平为纯文本（并提示省略非文本部分）
 - [x] thinking/reasoning 透传：聚合 `reasoning|thinking` 字段为 THINKING 节点（若上游提供）
@@ -404,9 +430,9 @@
 - [-] 非流式兜底：部分网关即使 `stream=false` 也只支持 SSE → 自动走一次 stream fallback 拼接文本
 - [x] 流式文本：解析 SSE `response.output_text.delta` / `response.output_text.done`
 - [x] chat-stream：解析 responses SSE 并输出 Augment chunks（RAW_RESPONSE/THINKING/TOOL_USE/TOKEN_USAGE/final）
-- [x] `response.incomplete`：识别为 MAX_TOKENS（用于 stop_reason 统一）
-- [-] 结束兜底：`response.completed` 或 final JSON 到来时补齐未完整输出的尾部文本
-- [x] 工具 schema 严格化：`additionalProperties=false` + required 完整（Responses 对 schema 更严格）
+- [x] `status=incomplete` + `incomplete_details.reason`：映射为 Augment stop_reason（`max_output_tokens`→MAX_TOKENS；`content_filter`→SAFETY；其余→UNSPECIFIED）
+- [x] 结束兜底：`response.completed`/final JSON 到来时补齐未完整输出的尾部文本（兼容部分网关缺失 done 事件）
+- [x] 工具 schema 严格化：补齐 `additionalProperties=false`；`required` 若缺省则兜底为全 required，若已提供则保留原值（Responses 对 schema 更严格）
 
 #### 8.4 `anthropic`（Anthropic Messages API 兼容）
 
@@ -430,10 +456,10 @@
 - [x] requestDefaults 归一：`max_tokens/max_output_tokens/...` → `generationConfig.maxOutputTokens`
 - [x] 非流式文本：从 `candidates[0].content.parts[].text` 提取
 - [x] 流式文本：Gemini 常返回“累积全文”，用 delta 方式只输出新增文本（避免重复）
-- [-] functionCall：解析 `parts[].functionCall` 并输出 TOOL_USE chunks
-- [-] tool results：把 tool_result 归一为 `functionResponse` parts（并做 orphan/缺失兜底）
+- [x] functionCall：解析 `parts[].functionCall` 并输出 TOOL_USE chunks（优先用 `functionCall.id` 作为 `tool_use_id`，并按 id 去重）
+- [x] tool results：把 tool_result 归一为 `functionResponse` parts（透传 `tool_use_id`→`functionResponse.id`，并做 orphan/缺失兜底）
 - [-] image inlineData：支持 `parts[].inlineData`；不兼容时自动剥离并用 placeholder 代替
-- [-] stop_reason：从 candidate finish reason 映射为 Augment stop_reason（若上游提供）
+- [x] stop_reason：从 candidate `finishReason` 映射为 Augment stop_reason（未知值默认 END_TURN）
 - [-] token usage：解析 usage 字段并输出 TOKEN_USAGE（若上游提供）
 
 ### 9) Augment Chat 协议对齐（请求/响应节点）
@@ -477,16 +503,22 @@
 ### 12) History Summary（滚动摘要：上下文压缩）实现细目
 
 - [x] 触发前置条件：`historySummary.enabled=true` 且有 `conversation_id` 且 chat_history 非空
-- [x] 防重复：若 history/request 已包含 summary exchange，则跳过（避免套娃）
+- [x] 防重复：仅当前 request 已包含 summary node 时跳过；history 中已有旧 summary 仍可刷新
 - [x] 触发决策：支持 `chars` / `ratio` / `auto`（auto 会结合上下文窗口估算）
-- [x] 上下文窗口估算（inference）：按模型名启发式推断（如 `gpt-4o`→128k、`claude-*`→200k 等）
-- [x] 覆盖优先级：`contextWindowTokensOverrides`（按 model 子串最长匹配）> `contextWindowTokensDefault` > 推断值
-- [x] Tail 选择：保留末尾 `historyTailSizeCharsToExclude` 字符 + 至少 `minTailExchanges` 个 exchanges
+- [x] 触发体积口径：`history + message + prefix/selected_code/suffix/diff`（UTF-8 bytes）
+- [x] 上下文窗口基准模型：优先使用“当前对话模型”（requestedModel；缺失时回退当前请求实际 model），与 summary 生成模型解耦
+- [x] 上下文窗口估算（inference）：按编程模型名启发式推断（Claude4 / GPT5 / Gemini2.5-3 / Kimi）
+- [x] 覆盖优先级：`contextWindowTokensOverrides`（按 model 子串最长匹配，大小写不敏感）> `contextWindowTokensDefault` > 推断值
+- [x] 常见覆盖参考：`gpt-5.3-codex=400000`、`gpt-5.2=400000`、`claude-4.6-opus=1000000`、`gemini-2.5-pro=1000000`、`gemini-3-flash=1000000`、`kimi-k2=128000`
+- [x] Tail 选择：保留末尾 `historyTailSizeCharsToExclude` bytes（UTF-8 估算）+ 至少 `minTailExchanges` 个 exchanges
+- [x] 切分一致性：触发后不再被“仅 history 总量”二次否决
 - [x] Abridged middle：按 `abridgedHistoryParams` 输出“中段摘要”，降低 token 成本
 - [x] Summary supervisor 模板：`summaryNodeRequestMessageTemplate` 支持 `{summary}/{end_part_full}` 等占位符
-- [-] rolling summary cache：对话维度缓存（当上游按轮数裁剪导致 summary exchange 消失时可补回早期上下文）
+- [-] rolling summary cache：对话维度缓存（当上游裁剪导致 summary exchange 消失时可补回早期上下文）
 - [-] Editable History 兼容：检测到 checkpoint 注入 user-modified changes 时，自动失效该对话的 summary cache
 - [x] 一键清缓存：`BYOK: Clear History Summary Cache`
+- [x] 兜底：summary 生成失败时仍会注入 fallback summary（保证压缩路径可用）
+- [x] 兜底：`end_part_full` 中的 `tool_result` / `tool_use input` 会做中间截断，避免上下文爆炸
 
 ### 13) Workspace/Upstream 数据补齐（assets/checkpoints/文件片段）
 

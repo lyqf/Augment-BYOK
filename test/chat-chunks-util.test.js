@@ -97,6 +97,11 @@ test("buildFinalChatChunk: explicit stopReason overrides tool_use_requested", ()
   assert.equal(built.chunk.stop_reason, STOP_REASON_MAX_TOKENS);
 });
 
+test("buildFinalChatChunk: tool_use overrides end_turn stopReason", () => {
+  const built = buildFinalChatChunk({ nodeId: 0, stopReasonSeen: true, stopReason: STOP_REASON_END_TURN, sawToolUse: true });
+  assert.equal(built.chunk.stop_reason, STOP_REASON_TOOL_USE_REQUESTED);
+});
+
 test("buildFinalChatChunk: emits unspecified stop_reason when stream ended uncleanly", () => {
   const built = buildFinalChatChunk({ nodeId: 0, stopReasonSeen: false, stopReason: null, sawToolUse: false, endedCleanly: false });
   assert.equal(built.chunk.stop_reason, STOP_REASON_UNSPECIFIED);

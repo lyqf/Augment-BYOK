@@ -40,6 +40,12 @@ function sanitizeRequestDefaults(requestDefaults, { allowStreamOptions } = {}) {
     if ("streamOptions" in out) delete out.streamOptions;
   }
 
+  // 兼容：用户可能写 camelCase；OpenAI 实际使用 snake_case。
+  if ("parallelToolCalls" in out) {
+    if (!("parallel_tool_calls" in out)) out.parallel_tool_calls = out.parallelToolCalls;
+    delete out.parallelToolCalls;
+  }
+
   // 兼容：用户从 /responses 或其它网关迁移时，可能写 max_output_tokens/maxOutputTokens。
   // chat/completions 仍以 max_tokens/max_completion_tokens 为准；这里仅在未显式提供时映射。
   const hasMaxTokens = Number.isFinite(Number(out.max_tokens ?? out.maxTokens)) && Number(out.max_tokens ?? out.maxTokens) > 0;

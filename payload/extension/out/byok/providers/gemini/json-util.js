@@ -87,6 +87,7 @@ async function* emitGeminiPartsAsAugmentChunks(parts, { nodeIdStart, getToolMeta
 
   let sawToolUse = false;
   let toolSeq = 0;
+  const seenToolUseIds = new Set();
 
   let textBuf = "";
   const flushText = () => {
@@ -113,9 +114,14 @@ async function* emitGeminiPartsAsAugmentChunks(parts, { nodeIdStart, getToolMeta
 
     const toolName = normalizeString(fc.name);
     if (!toolName) continue;
-    toolSeq += 1;
-    const toolUseId = `tool-${sanitizeToolHint(toolName)}-${toolSeq}`;
     const inputJson = normalizeFunctionCallArgsToJsonString(fc.args ?? fc.arguments);
+    let toolUseId = normalizeString(fc.id ?? fc.call_id ?? fc.callId ?? fc.tool_use_id ?? fc.toolUseId);
+    if (!toolUseId) {
+      toolSeq += 1;
+      toolUseId = `tool-${sanitizeToolHint(toolName)}-${toolSeq}`;
+    }
+    if (seenToolUseIds.has(toolUseId)) continue;
+    seenToolUseIds.add(toolUseId);
     const meta = getToolMeta(toolName);
     const built = buildToolUseChunks({ nodeId, toolUseId, toolName, inputJson, meta, supportToolUseStart });
     nodeId = built.nodeId;

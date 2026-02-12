@@ -2,7 +2,7 @@
 
 const { makeSseJsonIterator } = require("../sse-json");
 const { normalizeString } = require("../../infra/util");
-const { normalizeUsageInt, makeToolMetaGetter, assertSseResponse } = require("../provider-util");
+const { normalizeUsageInt, applyParallelToolCallsPolicy, makeToolMetaGetter, assertSseResponse } = require("../provider-util");
 const { extractErrorMessageFromJson } = require("../request-util");
 const { buildToolUseChunks, buildTokenUsageChunk, buildFinalChatChunk } = require("../chat-chunks-util");
 const {
@@ -121,11 +121,7 @@ async function* openAiChatStreamChunks({
   nodeIdStart
 }) {
   const hasTools = Array.isArray(tools) && tools.length > 0;
-  const rdRaw = requestDefaults && typeof requestDefaults === "object" && !Array.isArray(requestDefaults) ? requestDefaults : {};
-  const rd = hasTools && supportParallelToolUse !== true ? { ...rdRaw } : rdRaw;
-  if (hasTools && supportParallelToolUse !== true) {
-    if (!("parallel_tool_calls" in rd) && !("parallelToolCalls" in rd)) rd.parallel_tool_calls = false;
-  }
+  const rd = applyParallelToolCallsPolicy(requestDefaults, { hasTools, supportParallelToolUse });
 
   const resp = await postOpenAiChatStreamWithFallbacks({ baseUrl, apiKey, model, messages, tools, timeoutMs, abortSignal, extraHeaders, requestDefaults: rd });
 

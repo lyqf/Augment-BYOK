@@ -5,6 +5,9 @@ const { normalizeUsageInt, makeToolMetaGetter } = require("../provider-util");
 const { extractErrorMessageFromJson } = require("../request-util");
 const { buildToolUseChunks, buildTokenUsageChunk, buildFinalChatChunk } = require("../chat-chunks-util");
 const {
+  STOP_REASON_UNSPECIFIED,
+  STOP_REASON_MAX_TOKENS,
+  STOP_REASON_SAFETY,
   rawResponseNode,
   thinkingNode,
   makeBackChatChunk
@@ -46,6 +49,27 @@ function pickResponseObject(json) {
   const obj = json && typeof json === "object" ? json : null;
   const resp = obj?.response && typeof obj.response === "object" ? obj.response : null;
   return resp || obj;
+}
+
+function mapResponsesIncompleteReasonToAugment(reason) {
+  const r = normalizeString(reason).toLowerCase();
+  if (r === "max_output_tokens" || r === "max_tokens" || r === "length") return STOP_REASON_MAX_TOKENS;
+  if (r === "content_filter" || r === "contentfilter" || r === "safety") return STOP_REASON_SAFETY;
+  return STOP_REASON_UNSPECIFIED;
+}
+
+function extractStopReasonFromResponsesObject(obj) {
+  const resp = obj && typeof obj === "object" ? obj : null;
+  if (!resp) return { stopReasonSeen: false, stopReason: null };
+
+  const status = normalizeString(resp.status).toLowerCase();
+  const details =
+    (resp.incomplete_details && typeof resp.incomplete_details === "object" ? resp.incomplete_details : null) ||
+    (resp.incompleteDetails && typeof resp.incompleteDetails === "object" ? resp.incompleteDetails : null);
+  const reason = normalizeString(details?.reason);
+
+  if (status !== "incomplete" && !reason) return { stopReasonSeen: false, stopReason: null };
+  return { stopReasonSeen: true, stopReason: mapResponsesIncompleteReasonToAugment(reason) };
 }
 
 function extractTextFromResponsesJson(json) {
@@ -129,13 +153,15 @@ async function* emitOpenAiResponsesJsonAsAugmentChunks(json, { toolMetaByName, s
   nodeId = usageBuilt.nodeId;
   if (usageBuilt.chunk) yield usageBuilt.chunk;
 
-  const final = buildFinalChatChunk({ nodeId, stopReasonSeen: false, stopReason: null, sawToolUse });
+  const stop = extractStopReasonFromResponsesObject(obj);
+  const final = buildFinalChatChunk({ nodeId, stopReasonSeen: stop.stopReasonSeen, stopReason: stop.stopReason, sawToolUse });
   yield final.chunk;
 }
 
 module.exports = {
   extractToolCallsFromResponseOutput,
   extractReasoningSummaryFromResponseOutput,
+  extractStopReasonFromResponsesObject,
   extractTextFromResponsesJson,
   emitOpenAiResponsesJsonAsAugmentChunks
 };

@@ -79,7 +79,7 @@ function buildGeminiToolResultsParts(nodes, { toolNameByUseId, pendingById }) {
     if (!("tool_use_id" in response)) response.tool_use_id = toolUseId;
     if (!("tool_name" in response)) response.tool_name = toolName;
     if (isError) response.error = true;
-    parts.push({ functionResponse: { name: toolName, response } });
+    parts.push({ functionResponse: { id: toolUseId, name: toolName, response } });
     if (pendingById && pendingById.has(toolUseId)) pendingById.delete(toolUseId);
   }
 
@@ -87,7 +87,7 @@ function buildGeminiToolResultsParts(nodes, { toolNameByUseId, pendingById }) {
     for (const [toolUseId, meta] of pendingById.entries()) {
       const toolName = normalizeString(meta?.toolName) || normalizeString(toolNameByUseId.get(toolUseId));
       if (!toolName) continue;
-      parts.push({ functionResponse: { name: toolName, response: buildMissingToolResultResponse({ toolUseId, toolName }) } });
+      parts.push({ functionResponse: { id: toolUseId, name: toolName, response: buildMissingToolResultResponse({ toolUseId, toolName }) } });
       injectedMissing += 1;
       pendingById.delete(toolUseId);
     }
@@ -123,7 +123,7 @@ function buildGeminiAssistantParts(text, outNodes, { toolNameByUseId, pendingByI
     const args = shared.parseJsonObjectOrEmpty(inputJson);
     toolNameByUseId.set(toolUseId, toolName);
     if (pendingById) pendingById.set(toolUseId, { toolUseId, toolName, inputJson });
-    parts.push({ functionCall: { name: toolName, args } });
+    parts.push({ functionCall: { id: toolUseId, name: toolName, args } });
   }
 
   return parts;

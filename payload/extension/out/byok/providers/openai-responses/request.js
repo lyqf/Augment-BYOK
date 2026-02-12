@@ -15,6 +15,12 @@ function normalizeOpenAiResponsesRequestDefaults(requestDefaults) {
   const rd = stripByokInternalKeys(raw);
   const out = { ...rd };
 
+  // 兼容：用户可能写 camelCase；OpenAI 实际使用 snake_case。
+  if ("parallelToolCalls" in out) {
+    if (!("parallel_tool_calls" in out)) out.parallel_tool_calls = out.parallelToolCalls;
+    delete out.parallelToolCalls;
+  }
+
   // 兼容：用户常写 max_tokens/maxTokens；responses API 使用 max_output_tokens。
   // 仅在未显式提供 max_output_tokens 时做映射，避免覆盖用户意图。
   const maxOutput = pickPositiveIntFromRecord(out, MAX_TOKENS_ALIAS_KEYS);

@@ -10,6 +10,24 @@ function normalizeUsageInt(v) {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
+function applyParallelToolCallsPolicy(requestDefaults, { hasTools, supportParallelToolUse } = {}) {
+  const rd = requestDefaults && typeof requestDefaults === "object" && !Array.isArray(requestDefaults) ? requestDefaults : {};
+  const hasSnake = Object.prototype.hasOwnProperty.call(rd, "parallel_tool_calls");
+  const hasCamel = Object.prototype.hasOwnProperty.call(rd, "parallelToolCalls");
+
+  // 兼容：用户可能写 camelCase；OpenAI 实际使用 snake_case。
+  if (!hasSnake && hasCamel) {
+    const out = { ...rd, parallel_tool_calls: rd.parallelToolCalls };
+    delete out.parallelToolCalls;
+    return out;
+  }
+
+  const tools = hasTools === true;
+  if (!tools || supportParallelToolUse === true) return rd;
+  if (hasSnake || hasCamel) return rd;
+  return { ...rd, parallel_tool_calls: false };
+}
+
 function isInvalidRequestStatusForFallback(status) {
   const s = Number(status);
   return Number.isFinite(s) && INVALID_REQUEST_FALLBACK_STATUSES.has(s);
@@ -33,4 +51,10 @@ async function assertSseResponse(resp, { label, expectedHint, previewChars } = {
   throw new Error(`${normalizeString(label) || "SSE"} 响应不是 SSE（content-type=${contentType || "unknown"}）${hint}；detail: ${detail}`.trim());
 }
 
-module.exports = { normalizeUsageInt, isInvalidRequestStatusForFallback, makeToolMetaGetter, assertSseResponse };
+module.exports = {
+  normalizeUsageInt,
+  applyParallelToolCallsPolicy,
+  isInvalidRequestStatusForFallback,
+  makeToolMetaGetter,
+  assertSseResponse
+};

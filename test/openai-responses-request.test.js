@@ -43,3 +43,20 @@ test("openai-responses request: minimal defaults keeps max_output_tokens only", 
   const out = buildMinimalRetryRequestDefaults({ max_tokens: 321, temperature: 0.2, some_unknown: "x" });
   assert.deepEqual(out, { max_output_tokens: 321 });
 });
+
+test("openai-responses request: canonicalizes parallelToolCalls -> parallel_tool_calls", () => {
+  const { body } = buildOpenAiResponsesRequest({
+    baseUrl: "https://api.example.com/v1",
+    apiKey: "sk_test",
+    model: "gpt-4o-mini",
+    instructions: "",
+    input: [],
+    tools: [],
+    extraHeaders: {},
+    requestDefaults: { parallelToolCalls: false },
+    stream: false
+  });
+
+  assert.equal(body.parallel_tool_calls, false);
+  assert.equal("parallelToolCalls" in body, false);
+});
