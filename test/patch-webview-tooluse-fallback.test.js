@@ -26,39 +26,37 @@ function readUtf8(filePath) {
 
 function makeFixture() {
   return [
-    // tool list nodes (grouped path)
-    "const C=a((()=>f().filter((d=>!!d.tool_use))));",
-    // layout decision
-    "D(z,(O=>{f().length===1?O(R):O(F,!1)}));",
-    // render gate
-    "D(w,(d=>{f()?.length&&d(m)}));",
-    // ungrouped tool list (enableGroupedTools=false path)
-    'T=a((()=>fe(e(E),"$displayableToolUseNodes",o).map((i=>i.tool_use)).filter((i=>!!i))));',
-    // tool card state gate ($toolUseState)
-    'function eo(n,t){const o=1,f=()=>fe(e(h),"$toolUseState",$),k=1}',
+    // extension-client-context selector
+    'a8=I(((e,t,n)=>{if(!n||!t)return[];const i=rt.select(e,t,n),a=i?.structured_output_nodes?.filter((r=>r.type===de.TOOL_USE));if(!a)return[];let o=!1;return a.filter((r=>{if(o||!r.tool_use)return!1;const s=Oi.select(e,r.requestId??n,r.tool_use?.tool_use_id);return s.phase!==K.new&&s.phase!==K.unknown&&s.phase!==K.checkingSafety&&(s.phase!==K.runnable||(o=!0,!0))}))}));',
+    // toolUseState selector
+    'Oi=I(((e,t,n)=>{if(!n)return{requestId:t,toolUseId:"",result:void 0,phase:K.unknown};const i=e.tools.toolsByRequest[t];return(i?H(i,n):void 0)||{requestId:t,toolUseId:n,result:void 0,phase:K.new}}));',
+    'var M={sent:"sent"};var Ze={TOOL_RESULT:"tool_result"};',
+    'function qi(e){return !!(e&&e.request_message)}',
     ""
   ].join("");
 }
 
-test("patchWebviewToolUseFallback: patches tool list", () => {
+test("patchWebviewToolUseFallback: patches latest tool list flow", () => {
   withTempDir("augment-byok-webview-tooluse-", (dir) => {
     const extDir = path.join(dir, "extension");
     const assetsDir = path.join(extDir, "common-webviews", "assets");
-    const filePath = path.join(assetsDir, "AugmentMessage-test.js");
-    writeUtf8(filePath, makeFixture());
+    const selectorFilePath = path.join(assetsDir, "extension-client-context-test.js");
+    writeUtf8(selectorFilePath, makeFixture());
 
     patchWebviewToolUseFallback(extDir);
 
-    const out = readUtf8(filePath);
-    assert.ok(out.includes("__byok_tool_list_fallback"), "tool list fallback not applied");
-    assert.ok(out.includes("e(C).length===1?O(R):O(F,!1)"), "layout gate not patched");
-    assert.ok(out.includes("e(C).length&&d(m)"), "render gate not patched");
-    assert.ok(out.includes("__augment_byok_webview_tooluse_fallback_v1"), "tool list marker missing");
-    assert.ok(out.includes("__byok_tool_list_ungrouped_fallback"), "ungrouped tool list fallback not applied");
-    assert.ok(out.includes("t.toolUseNodes.map"), "ungrouped tool list fallback not applied");
-    assert.ok(out.includes("__augment_byok_webview_tooluse_fallback_v1_ungrouped"), "ungrouped marker missing");
-    assert.ok(out.includes("__byok_toolUseId"), "tool state fallback not applied");
-    assert.ok(out.includes("contentNodes:[]}}},k=1"), "tool state arrow function not closed before const decl");
-    assert.ok(out.includes("__augment_byok_webview_tooluse_fallback_v1_tool_state"), "tool state marker missing");
+    const selectorOut = readUtf8(selectorFilePath);
+    assert.ok(selectorOut.includes("__byok_displayable_tool_nodes_fallback"), "selector fallback not applied");
+    assert.ok(selectorOut.includes("i?.status===M.sent"), "selector should preserve live turn behavior");
+    assert.ok(selectorOut.includes("a.filter((r=>!!r.tool_use))"), "selector should fall back to raw tool nodes");
+    assert.ok(selectorOut.includes("__augment_byok_webview_tooluse_selector_fallback_v1"), "selector marker missing");
+    assert.ok(selectorOut.includes("__byok_existing=i?H(i,n):void 0;"), "tool state selector fallback not applied");
+    assert.ok(selectorOut.includes("Object.values(e.conversationHistory.history)"), "tool state fallback should scan hydrated histories");
+    assert.ok(selectorOut.includes("__byok_node.type===Ze.TOOL_RESULT"), "tool state fallback should restore from tool result nodes");
+    assert.ok(selectorOut.includes("__byok_result.is_error?K.error:K.completed"), "tool state fallback should restore phase");
+    assert.ok(
+      selectorOut.includes("__augment_byok_webview_tooluse_state_selector_fallback_v1"),
+      "tool state selector marker missing"
+    );
   });
 });

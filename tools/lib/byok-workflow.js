@@ -17,6 +17,7 @@ const { patchMemoriesUpperBoundSize } = require("../patch/patch-memories-upper-b
 const { patchTasklistAutoRoot } = require("../patch/patch-tasklist-auto-root");
 const { patchTasklistAddTasksSanitizeEmptyIds } = require("../patch/patch-tasklist-add-tasks-sanitize-empty-ids");
 const { patchTasklistAddTasksErrors } = require("../patch/patch-tasklist-add-tasks-errors");
+const { patchTasklistReorganizeNoopErrors } = require("../patch/patch-tasklist-reorganize-noop-errors");
 const { patchPackageJsonCommands } = require("../patch/patch-package-json-commands");
 const { patchWebviewToolUseFallback } = require("../patch/patch-webview-tooluse-fallback");
 const { patchWebviewHistorySummaryNode } = require("../patch/patch-webview-history-summary-node");
@@ -90,6 +91,9 @@ function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, intercep
 
   log(`patch tasklist tools (add_tasks error reporting)`);
   patchTasklistAddTasksErrors(extJs);
+
+  log(`patch tasklist tools (reorganize_tasklist no-op => error)`);
+  patchTasklistReorganizeNoopErrors(extJs);
 
   log(`guard: no autoAuth`);
   guardNoAutoAuth(extJs);

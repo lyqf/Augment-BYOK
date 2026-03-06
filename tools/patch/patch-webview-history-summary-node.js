@@ -7,6 +7,14 @@ const path = require("path");
 const { ensureMarker, replaceOnceRegex } = require("../lib/patch");
 
 const MARKER = "__augment_byok_webview_history_summary_node_slim_v1";
+const PATCH_LABEL = "extension-client-context HISTORY_SUMMARY node slimming";
+
+function resolveHistorySummaryFormatter(src) {
+  const s = String(src || "");
+  const match = s.match(/function ([A-Za-z_$][0-9A-Za-z_$]*)\(e\)\{const t=e\.history_end\.map\(/);
+  if (!match) throw new Error("extension-client-context history summary formatter not found (upstream may have changed)");
+  return String(match[1] || "");
+}
 
 function patchExtensionClientContextAsset(filePath) {
   if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
@@ -19,17 +27,20 @@ function patchExtensionClientContextAsset(filePath) {
   // 修复策略：仍然生成同样的 summary payload（C），但存入 state 的节点改为 TEXT，并把 message_template 填充后的字符串写入 text_node.content。
   // 这样：语义保持（模型仍拿到同样的 supervisor prompt），同时避免把 history_end 的巨型结构长期挂在 state 上。
   let out = original;
+  const formatter = resolveHistorySummaryFormatter(out);
 
-  // 兼容上游小版本变更：不强依赖整段变量名（N/F/aS/rS 等），只替换“把 payload C 存入 HISTORY_SUMMARY 节点”的那一小段。
-  // 目标：U={id:0,type:Ie.HISTORY_SUMMARY,history_summary_node:C} -> U={id:0,type:Ie.TEXT,text_node:{content:k3(C)}}
-  //
-  // NOTE: k3 是上游内部函数：把 summary payload 按 message_template 渲染为最终字符串。
-  const summaryNodeRe = /\{id:0,type:Ie\.HISTORY_SUMMARY,history_summary_node:([A-Za-z_$][0-9A-Za-z_$]*)\}/g;
+  // latest-only：直接改 buildHistorySummaryNode 的返回值。
+  const summaryNodeRe = /return\{id:([^,{}]+),type:([A-Za-z_$][0-9A-Za-z_$]*)\.HISTORY_SUMMARY,history_summary_node:([A-Za-z_$][0-9A-Za-z_$]*)\}/g;
   out = replaceOnceRegex(
     out,
     summaryNodeRe,
-    (m) => `{id:0,type:Ie.TEXT,text_node:{content:k3(${m[1]})}}`,
-    "extension-client-context HISTORY_SUMMARY node slimming"
+    (m) => {
+      const idExpr = String(m[1] || "0");
+      const enumAlias = String(m[2] || "");
+      const payloadVar = String(m[3] || "");
+      return `return{id:${idExpr},type:${enumAlias}.TEXT,text_node:{content:${formatter}(${payloadVar})}}`;
+    },
+    PATCH_LABEL
   );
 
   out = ensureMarker(out, MARKER);

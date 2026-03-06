@@ -18,7 +18,15 @@
 - `tools/patch/patch-webview-tooluse-fallback.js`
 - `tools/patch/patch-webview-history-summary-node.js`
 - `tools/patch/patch-extension-entry.js`
+- `tools/patch/patch-disable-chat-history-truncation.js`
 - `tools/patch/patch-expose-upstream.js`
 - `tools/patch/patch-official-overrides.js`
 - `tools/patch/patch-callapi-shim.js`
+- `tools/patch/patch-model-picker-byok-only.js`
+- `tools/patch/patch-memories-upper-bound-size.js`
+- `tools/patch/patch-tasklist-auto-root.js`
+- `tools/patch/patch-tasklist-add-tasks-sanitize-empty-ids.js`
+- `tools/patch/patch-tasklist-add-tasks-errors.js`
+- `tools/patch/patch-tasklist-reorganize-noop-errors.js`
+- `tools/patch/patch-package-json-commands.js`
 - `tools/patch/guard-no-autoauth.js`

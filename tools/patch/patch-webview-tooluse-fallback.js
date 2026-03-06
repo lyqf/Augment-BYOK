@@ -6,103 +6,60 @@ const path = require("path");
 
 const { ensureMarker, replaceOnceRegex } = require("../lib/patch");
 
-const MARKER_TOOL_LIST = "__augment_byok_webview_tooluse_fallback_v1";
-const MARKER_TOOL_LIST_UNGROUPED = "__augment_byok_webview_tooluse_fallback_v1_ungrouped";
-const MARKER_TOOL_STATE = "__augment_byok_webview_tooluse_fallback_v1_tool_state";
+const MARKER_DISPLAYABLE_TOOL_NODES = "__augment_byok_webview_tooluse_selector_fallback_v1";
+const MARKER_TOOL_STATE_SELECTOR = "__augment_byok_webview_tooluse_state_selector_fallback_v1";
 
-function escapeRegExp(str) {
-  return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function patchAugmentMessageAsset(filePath) {
+function patchExtensionClientContextAsset(filePath) {
   if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
   const original = fs.readFileSync(filePath, "utf8");
-
   let out = original;
-  let changed = false;
   const applied = [];
 
-  // 1) $displayableToolUseNodes 在重启后可能为空（store 未恢复），但 turn.structured_output_nodes 仍包含 TOOL_USE。
-  //    兜底：优先用 store 的 displayable nodes；为空时回退到 t.toolUseNodes。
-  if (!out.includes(MARKER_TOOL_LIST)) {
-    const alreadyPatched = out.includes("__byok_tool_list_fallback");
+  // selectExchangeDisplayableToolNodesOnly 会在 toolUseState 缺失时把历史 TOOL_USE 全过滤掉。
+  // 对“已完成/历史回放”turn，这会导致工具区整体消失。稳定兜底放到 selector 层：
+  // - 先保留上游基于 tool phase 的过滤；
+  // - 若过滤结果为空且该 exchange 已不是 sent（即不是正在进行中的 live turn），
+  //   则直接回退到 exchange 自身的 TOOL_USE nodes。
+  if (!out.includes(MARKER_DISPLAYABLE_TOOL_NODES)) {
+    const alreadyPatched = out.includes("__byok_displayable_tool_nodes_fallback");
     if (!alreadyPatched) {
-      let listVar = null;
-      let srcFn = null;
-
       out = replaceOnceRegex(
         out,
-        /const ([A-Za-z_$][0-9A-Za-z_$]*)=([A-Za-z_$][0-9A-Za-z_$]*)\(\(\(\)=>\s*([A-Za-z_$][0-9A-Za-z_$]*)\(\)\.filter\(\(([A-Za-z_$][0-9A-Za-z_$]*)=>!!\4\.tool_use\)\)\)\);/g,
+        /([A-Za-z_$][0-9A-Za-z_$]*)=I\(\(\(([A-Za-z_$][0-9A-Za-z_$]*),([A-Za-z_$][0-9A-Za-z_$]*),([A-Za-z_$][0-9A-Za-z_$]*)\)=>\{if\(!\4\|\|!\3\)return\[\];const ([A-Za-z_$][0-9A-Za-z_$]*)=rt\.select\(\2,\3,\4\),([A-Za-z_$][0-9A-Za-z_$]*)=\5\?\.structured_output_nodes\?\.filter\(\(([A-Za-z_$][0-9A-Za-z_$]*)=>\7\.type===de\.TOOL_USE\)\);if\(!\6\)return\[\];let ([A-Za-z_$][0-9A-Za-z_$]*)=!1;return \6\.filter\(\(\7=>\{if\(\8\|\|!\7\.tool_use\)return!1;const ([A-Za-z_$][0-9A-Za-z_$]*)=Oi\.select\(\2,\7\.requestId\?\?\4,\7\.tool_use\?\.tool_use_id\);return \9\.phase!==K\.new&&\9\.phase!==K\.unknown&&\9\.phase!==K\.checkingSafety&&\(\9\.phase!==K\.runnable\|\|\(\8=!0,!0\)\)\}\)\)\}\)\);/g,
         (m) => {
-          listVar = m[1];
-          const wrapFn = m[2];
-          srcFn = m[3];
-          const itemVar = m[4];
-          return `const ${listVar}=${wrapFn}((()=>{const __byok_tool_list_fallback=1;const __byok_list=${srcFn}();const __byok_arr=Array.isArray(__byok_list)?__byok_list.filter((${itemVar}=>!!${itemVar}.tool_use)):[];return __byok_arr.length?__byok_arr:t.toolUseNodes.filter((${itemVar}=>!!${itemVar}.tool_use))}));`;
+          const selectorVar = m[1];
+          const stateVar = m[2];
+          const conversationIdVar = m[3];
+          const requestIdVar = m[4];
+          const exchangeVar = m[5];
+          const nodesVar = m[6];
+          const nodeVar = m[7];
+          const breakVar = m[8];
+          const toolStateVar = m[9];
+          return `${selectorVar}=I(((${stateVar},${conversationIdVar},${requestIdVar})=>{if(!${requestIdVar}||!${conversationIdVar})return[];const ${exchangeVar}=rt.select(${stateVar},${conversationIdVar},${requestIdVar}),${nodesVar}=${exchangeVar}?.structured_output_nodes?.filter((${nodeVar}=>${nodeVar}.type===de.TOOL_USE));if(!${nodesVar})return[];let ${breakVar}=!1;const __byok_displayable_tool_nodes_fallback=${nodesVar}.filter((${nodeVar}=>{if(${breakVar}||!${nodeVar}.tool_use)return!1;const ${toolStateVar}=Oi.select(${stateVar},${nodeVar}.requestId??${requestIdVar},${nodeVar}.tool_use?.tool_use_id);return ${toolStateVar}.phase!==K.new&&${toolStateVar}.phase!==K.unknown&&${toolStateVar}.phase!==K.checkingSafety&&(${toolStateVar}.phase!==K.runnable||(${breakVar}=!0,!0))}));return __byok_displayable_tool_nodes_fallback.length||${exchangeVar}?.status===M.sent?__byok_displayable_tool_nodes_fallback:${nodesVar}.filter((${nodeVar}=>!!${nodeVar}.tool_use))})));`;
         },
-        "AugmentMessage tool list nodes fallback"
+        "extension-client-context displayable tool nodes fallback"
       );
-
-      if (!listVar || !srcFn) throw new Error("AugmentMessage tool list nodes fallback: failed to capture vars");
-
-      out = replaceOnceRegex(
-        out,
-        new RegExp(
-          `${escapeRegExp(srcFn)}\\(\\)\\.length===1\\?([A-Za-z_$][0-9A-Za-z_$]*)\\(([A-Za-z_$][0-9A-Za-z_$]*)\\):\\1\\(([A-Za-z_$][0-9A-Za-z_$]*),!1\\)`,
-          "g"
-        ),
-        (m) => `e(${listVar}).length===1?${m[1]}(${m[2]}):${m[1]}(${m[3]},!1)`,
-        "AugmentMessage tool list layout"
-      );
-      out = replaceOnceRegex(
-        out,
-        new RegExp(`${escapeRegExp(srcFn)}\\(\\)\\?\\.length&&([A-Za-z_$][0-9A-Za-z_$]*)\\(([A-Za-z_$][0-9A-Za-z_$]*)\\)`, "g"),
-        (m) => `e(${listVar}).length&&${m[1]}(${m[2]})`,
-        "AugmentMessage tool list render gate"
-      );
-
-      changed = true;
-      applied.push("tool_list");
+      applied.push("displayable_selector");
     }
-    out = ensureMarker(out, MARKER_TOOL_LIST);
+    out = ensureMarker(out, MARKER_DISPLAYABLE_TOOL_NODES);
   }
 
-  // 3) enableGroupedTools=false 时走 _p：它直接依赖 $displayableToolUseNodes.map(...).filter(...)，
-  //    重启后 store 未恢复会导致列表为空 -> 工具区域“有容器但空白”。
-  //    兜底：displayable 为空时，回退到 turn.toolUseNodes（与 grouped 分支一致）。
-  if (!out.includes(MARKER_TOOL_LIST_UNGROUPED)) {
-    const alreadyPatched = out.includes("__byok_tool_list_ungrouped_fallback");
+  // selectToolUseState 在 tools slice 缺失时默认返回 phase=new，导致 ToolUse 组件无法展示历史结果。
+  // 稳定兜底：从同一 conversation group 里向后扫描 TOOL_RESULT request nodes，恢复 completed/error 状态。
+  if (!out.includes(MARKER_TOOL_STATE_SELECTOR)) {
+    const alreadyPatched = out.includes("__byok_tool_state_selector_fallback");
     if (!alreadyPatched) {
       out = replaceOnceRegex(
         out,
-        /([A-Za-z_$][0-9A-Za-z_$]*)=([A-Za-z_$][0-9A-Za-z_$]*)\(\(\(\)=>fe\(e\(([A-Za-z_$][0-9A-Za-z_$]*)\),"\$displayableToolUseNodes",([A-Za-z_$][0-9A-Za-z_$]*)\)\.map\(\(([A-Za-z_$][0-9A-Za-z_$]*)=>\5\.tool_use\)\)\.filter\(\(\5=>!!\5\)\)\)\);/g,
+        /([A-Za-z_$][0-9A-Za-z_$]*)=I\(\(\(([A-Za-z_$][0-9A-Za-z_$]*),([A-Za-z_$][0-9A-Za-z_$]*),([A-Za-z_$][0-9A-Za-z_$]*)\)=>\{if\(!\4\)return\{requestId:\3,toolUseId:"",result:void 0,phase:K\.unknown\};const ([A-Za-z_$][0-9A-Za-z_$]*)=\2\.tools\.toolsByRequest\[\3\];return\(\5\?H\(\5,\4\):void 0\)\|\|\{requestId:\3,toolUseId:\4,result:void 0,phase:K\.new\}\}\)\)/g,
         (m) =>
-          `${m[1]}=${m[2]}((()=>{const __byok_tool_list_ungrouped_fallback=1;const u=fe(e(${m[3]}),\"$displayableToolUseNodes\",${m[4]});const f=Array.isArray(u)?u.map((x=>x.tool_use)).filter((x=>!!x)):[];return f.length?f:t.toolUseNodes.map((x=>x.tool_use)).filter((x=>!!x))}));`,
-        "AugmentMessage ungrouped tool list fallback"
+          `${m[1]}=I(((${m[2]},${m[3]},${m[4]})=>{if(!${m[4]})return{requestId:${m[3]},toolUseId:"",result:void 0,phase:K.unknown};const ${m[5]}=${m[2]}.tools.toolsByRequest[${m[3]}],__byok_existing=${m[5]}?H(${m[5]},${m[4]}):void 0;if(__byok_existing)return __byok_existing;try{const __byok_histories=${m[2]}.conversationHistory&&${m[2]}.conversationHistory.history?Object.values(${m[2]}.conversationHistory.history):[];for(const __byok_history of __byok_histories){if(!__byok_history||!Array.isArray(__byok_history.ids))continue;const __byok_start=__byok_history.ids.indexOf(${m[3]});if(__byok_start<0)continue;for(let __byok_i=__byok_start+1;__byok_i<__byok_history.ids.length;__byok_i++){const __byok_item=H(__byok_history,__byok_history.ids[__byok_i])?.item;if(!__byok_item)break;if(qi(__byok_item))break;const __byok_nodes=__byok_item.structured_request_nodes;if(!Array.isArray(__byok_nodes))continue;for(const __byok_node of __byok_nodes){const __byok_result=__byok_node&&__byok_node.type===Ze.TOOL_RESULT?__byok_node.tool_result_node:null;if(!__byok_result||__byok_result.tool_use_id!==${m[4]})continue;const __byok_contentNodes=Array.isArray(__byok_result.content_nodes)?__byok_result.content_nodes:[];return{requestId:${m[3]},toolUseId:${m[4]},phase:__byok_result.is_error?K.error:K.completed,result:{text:typeof __byok_result.content==="string"?__byok_result.content:"",isError:!!__byok_result.is_error,contentNodes:__byok_contentNodes,requestId:typeof __byok_result.request_id==="string"?__byok_result.request_id:void 0}}}break}}}catch{}return{requestId:${m[3]},toolUseId:${m[4]},result:void 0,phase:K.new}}))`,
+        "extension-client-context tool use state selector fallback"
       );
-      changed = true;
-      applied.push("tool_list_ungrouped");
+      applied.push("tool_state_selector");
     }
-    out = ensureMarker(out, MARKER_TOOL_LIST_UNGROUPED);
-  }
-
-  // 4) To（单工具卡片）渲染 gate 是 i()（$toolUseState）。重启后 toolUseState slice 可能为空 -> 卡片内容不渲染。
-  //    兜底：当 store 不存在 toolUseState 时，从该 requestId 的 turn group 中回放 TOOL_RESULT 节点恢复状态。
-  //    NOTE: 不引入“占位文案”，只恢复已存在于历史数据中的 tool_result_node.content / content_nodes。
-  if (!out.includes(MARKER_TOOL_STATE)) {
-    const alreadyPatched = out.includes("__byok_toolUseId");
-    if (!alreadyPatched) {
-      out = replaceOnceRegex(
-        out,
-        /([A-Za-z_$][0-9A-Za-z_$]*)=\(\)=>fe\(e\(([A-Za-z_$][0-9A-Za-z_$]*)\),"\$toolUseState",([A-Za-z_$][0-9A-Za-z_$]*)\)/g,
-        (m) =>
-          `${m[1]}=()=>{const s=fe(e(${m[2]}),\"$toolUseState\",${m[3]});if(s)return s;const __byok_toolUseId=String(t&&t.toolUse?(t.toolUse.tool_use_id||t.toolUse.toolUseId||\"\"):\"\");try{const __byok_store=(typeof no===\"function\"?no():null)?.store;const __byok_alt=__byok_store&&typeof cr!==\"undefined\"&&cr&&typeof cr.select===\"function\"?cr.select(__byok_store.getState(),t.requestId,__byok_toolUseId):null;if(__byok_alt)return __byok_alt}catch{}const __byok_msgs=typeof t!=\"undefined\"&&t&&typeof t.postToolUseMessages===\"function\"?t.postToolUseMessages():t&&Array.isArray(t.postToolUseMessages)?t.postToolUseMessages:[];if(Array.isArray(__byok_msgs)&&__byok_msgs.length>0)return{phase:he.completed,result:{text:String(__byok_msgs.join(\"\\n\\n\")),isError:!1,contentNodes:[]}};return{phase:he.completed,result:{text:\"\",isError:!1,contentNodes:[]}}}`,
-        "AugmentMessage tool use state fallback"
-      );
-      changed = true;
-      applied.push("tool_state");
-    }
-    out = ensureMarker(out, MARKER_TOOL_STATE);
+    out = ensureMarker(out, MARKER_TOOL_STATE_SELECTOR);
   }
 
   const didChange = out !== original;
@@ -117,15 +74,15 @@ function patchWebviewToolUseFallback(extensionDir) {
   const assetsDir = path.join(extDir, "common-webviews", "assets");
   if (!fs.existsSync(assetsDir)) throw new Error(`webview assets dir missing: ${assetsDir}`);
 
-  const candidates = fs
+  const selectorCandidates = fs
     .readdirSync(assetsDir)
-    .filter((name) => typeof name === "string" && name.startsWith("AugmentMessage-") && name.endsWith(".js"))
+    .filter((name) => typeof name === "string" && name.startsWith("extension-client-context-") && name.endsWith(".js"))
     .map((name) => path.join(assetsDir, name));
 
-  if (!candidates.length) throw new Error("AugmentMessage asset not found (upstream may have changed)");
+  if (!selectorCandidates.length) throw new Error("extension-client-context asset not found (upstream may have changed)");
 
   const results = [];
-  for (const filePath of candidates) results.push({ filePath, ...patchAugmentMessageAsset(filePath) });
+  for (const filePath of selectorCandidates) results.push({ filePath, ...patchExtensionClientContextAsset(filePath) });
   return { changed: results.some((r) => r.changed), results };
 }
 
