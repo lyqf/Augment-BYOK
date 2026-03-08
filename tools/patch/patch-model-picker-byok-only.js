@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, injectIntoArrowPropertyFunctions } = require("../lib/patch");
+const { injectIntoArrowPropertyFunctions } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 
 const MARKER = "__augment_byok_model_picker_byok_only_v1";
 
 function patchModelPickerByokOnly(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   const injection =
     `try{` +
@@ -28,8 +27,7 @@ function patchModelPickerByokOnly(filePath) {
   const injected = injectIntoArrowPropertyFunctions(original, "getMergedAdditionalChatModels", injection);
   let next = injected.out;
 
-  next = ensureMarker(next, MARKER);
-  fs.writeFileSync(filePath, next, "utf8");
+  savePatchText(filePath, next, { marker: MARKER });
   return { changed: true, reason: "patched", patched: injected.count };
 }
 

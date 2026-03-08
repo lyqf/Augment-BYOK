@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, injectIntoAsyncMethods } = require("../lib/patch");
+const { injectIntoAsyncMethods } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 
 const MARKER = "__augment_byok_official_overrides_patched_v1";
 const OFFICIAL_CONN_EXPR = `const __byok_off=require("./byok/config/official");const __byok_conn=__byok_off.getOfficialConnection();`;
@@ -68,9 +68,8 @@ function patchCallApiStreamBaseUrl(src) {
 }
 
 function patchOfficialOverrides(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   let next = original;
   const gettersRes = patchClientAuthGetters(next);
@@ -84,8 +83,7 @@ function patchOfficialOverrides(filePath) {
   const streamBaseRes = patchCallApiStreamBaseUrl(next);
   next = streamBaseRes.out;
 
-  next = ensureMarker(next, MARKER);
-  fs.writeFileSync(filePath, next, "utf8");
+  savePatchText(filePath, next, { marker: MARKER });
   return {
     changed: true,
     reason: "patched",

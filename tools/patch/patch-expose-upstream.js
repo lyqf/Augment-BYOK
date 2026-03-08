@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
 const { findFirstInstantiationOfExportedClass } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 
 const MARKER = "__augment_byok_expose_upstream_v1";
 
 function patchExposeUpstream(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   const { classIdent, varName, terminatorIdx } = findFirstInstantiationOfExportedClass(original, "AugmentExtension");
 
@@ -25,11 +24,10 @@ function patchExposeUpstream(filePath) {
     `if(${varName}&&typeof ${varName}.callApiStream==="function")globalThis.__augment_byok_upstream.callApiStreamOriginal=${varName}.callApiStream.bind(${varName});` +
     `const __tm=(${varName}&&(${varName}._toolsModel||${varName}.toolsModel||${varName}.tools_model));` +
     `if(__tm&&typeof __tm.getToolDefinitions==="function"&&typeof __tm.callTool==="function")globalThis.__augment_byok_upstream.toolsModel=__tm;` +
-    `}catch{}` +
-    `;/*${MARKER}*/`;
+    `}catch{}`;
 
   const next = original.slice(0, terminatorIdx + 1) + injection + original.slice(terminatorIdx + 1);
-  fs.writeFileSync(filePath, next, "utf8");
+  savePatchText(filePath, next, { marker: MARKER });
   return { changed: true, reason: "patched", classIdent, varName };
 }
 

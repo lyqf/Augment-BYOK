@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, findMatchingParen, findStatementTerminatorIndex } = require("../lib/patch");
+const { findMatchingParen, findStatementTerminatorIndex } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 
 const MARKER = "__augment_byok_disable_chat_history_truncation_v1";
 
@@ -67,9 +67,8 @@ function findLimitChatHistoryMethodOpenBraceIndexes(src) {
 }
 
 function patchDisableChatHistoryTruncation(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   let out = original;
 
@@ -85,8 +84,7 @@ function patchDisableChatHistoryTruncation(filePath) {
       out = out.slice(0, range.rhsStart) + injectedRhs + out.slice(range.termIdx);
     }
 
-    out = ensureMarker(out, MARKER);
-    fs.writeFileSync(filePath, out, "utf8");
+    savePatchText(filePath, out, { marker: MARKER });
     return { changed: true, reason: "patched", patchedFieldAssignments: ranges.length };
   }
 
@@ -98,8 +96,7 @@ function patchDisableChatHistoryTruncation(filePath) {
   const sorted = methodOpenBraces.slice().sort((a, b) => b - a);
   for (const openBraceIdx of sorted) out = out.slice(0, openBraceIdx + 1) + injection + out.slice(openBraceIdx + 1);
 
-  out = ensureMarker(out, MARKER);
-  fs.writeFileSync(filePath, out, "utf8");
+  savePatchText(filePath, out, { marker: MARKER });
   return { changed: true, reason: "patched", patchedMethodDefinitions: methodOpenBraces.length };
 }
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, replaceOnceRegex } = require("../lib/patch");
+const { replaceOnceRegex } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
+const { listExtensionClientContextAssets } = require("./webview-assets");
 
 const MARKER = "__augment_byok_webview_history_summary_node_slim_v1";
 const PATCH_LABEL = "extension-client-context HISTORY_SUMMARY node slimming";
@@ -17,9 +18,8 @@ function resolveHistorySummaryFormatter(src) {
 }
 
 function patchExtensionClientContextAsset(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   // 上游 useHistorySummaryNew 会把 {history_end: tail exchanges(with nodes)} 存进 request_nodes 的 HISTORY_SUMMARY 节点。
   // 该节点体积巨大，后续“Editable History / 编辑历史对话”等路径可能对 request_nodes 做 JSON.stringify/clone，导致内存爆炸→VSIX 崩溃。
@@ -43,25 +43,12 @@ function patchExtensionClientContextAsset(filePath) {
     PATCH_LABEL
   );
 
-  out = ensureMarker(out, MARKER);
-  fs.writeFileSync(filePath, out, "utf8");
+  savePatchText(filePath, out, { marker: MARKER });
   return { changed: true, reason: "patched" };
 }
 
 function patchWebviewHistorySummaryNode(extensionDir) {
-  const extDir = path.resolve(String(extensionDir || ""));
-  if (!extDir || extDir === path.parse(extDir).root) throw new Error("patchWebviewHistorySummaryNode: invalid extensionDir");
-
-  const assetsDir = path.join(extDir, "common-webviews", "assets");
-  if (!fs.existsSync(assetsDir)) throw new Error(`webview assets dir missing: ${assetsDir}`);
-
-  const candidates = fs
-    .readdirSync(assetsDir)
-    .filter((name) => typeof name === "string" && name.startsWith("extension-client-context-") && name.endsWith(".js"))
-    .map((name) => path.join(assetsDir, name));
-
-  if (!candidates.length) throw new Error("extension-client-context asset not found (upstream may have changed)");
-
+  const candidates = listExtensionClientContextAssets(extensionDir, "patchWebviewHistorySummaryNode");
   const results = [];
   for (const filePath of candidates) results.push({ filePath, ...patchExtensionClientContextAsset(filePath) });
   return { changed: results.some((r) => r.changed), results };

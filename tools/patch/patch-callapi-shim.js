@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, injectIntoAsyncMethods } = require("../lib/patch");
+const { injectIntoAsyncMethods } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 
 const MARKER = "__augment_byok_callapi_shim_patched_v1";
 
 function patchCallApiShim(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   const callApiShimPath = "./byok/runtime/shim/call-api";
   const callApiStreamShimPath = "./byok/runtime/shim/call-api-stream";
@@ -43,8 +42,7 @@ function patchCallApiShim(filePath) {
   const streamRes = injectIntoAsyncMethods(next, "callApiStream", streamInjection);
   next = streamRes.out;
 
-  next = ensureMarker(next, MARKER);
-  fs.writeFileSync(filePath, next, "utf8");
+  savePatchText(filePath, next, { marker: MARKER });
   return { changed: true, reason: "patched", callApiPatched: apiRes.count, callApiStreamPatched: streamRes.count };
 }
 

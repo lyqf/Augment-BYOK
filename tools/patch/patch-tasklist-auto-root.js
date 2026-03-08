@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
 
-const { ensureMarker, replaceOnceRegex } = require("../lib/patch");
+const { replaceOnceRegex } = require("../lib/patch");
+const { loadPatchText, savePatchText } = require("./patch-target");
 const { requireCapture, buildEnsureRootSnippet } = require("./tasklist-common");
 
 const MARKER = "__augment_byok_tasklist_auto_root_patched_v1";
 
 function patchTasklistAutoRoot(filePath) {
-  if (!fs.existsSync(filePath)) throw new Error(`missing file: ${filePath}`);
-  const original = fs.readFileSync(filePath, "utf8");
-  if (original.includes(MARKER)) return { changed: false, reason: "already_patched" };
+  const { original, alreadyPatched } = loadPatchText(filePath, { marker: MARKER });
+  if (alreadyPatched) return { changed: false, reason: "already_patched" };
 
   let next = original;
 
@@ -86,8 +85,7 @@ function patchTasklistAutoRoot(filePath) {
     "tasklist auto root: reorganize_tasklist"
   );
 
-  next = ensureMarker(next, MARKER);
-  fs.writeFileSync(filePath, next, "utf8");
+  savePatchText(filePath, next, { marker: MARKER });
   return { changed: true, reason: "patched" };
 }
 

@@ -19,8 +19,8 @@ const { patchTasklistAddTasksSanitizeEmptyIds } = require("../patch/patch-taskli
 const { patchTasklistAddTasksErrors } = require("../patch/patch-tasklist-add-tasks-errors");
 const { patchTasklistReorganizeNoopErrors } = require("../patch/patch-tasklist-reorganize-noop-errors");
 const { patchPackageJsonCommands } = require("../patch/patch-package-json-commands");
-const { patchWebviewToolUseFallback } = require("../patch/patch-webview-tooluse-fallback");
 const { patchWebviewHistorySummaryNode } = require("../patch/patch-webview-history-summary-node");
+const { patchWebviewAssetCacheBust } = require("../patch/patch-webview-asset-cache-bust");
 const { guardNoAutoAuth } = require("../patch/guard-no-autoauth");
 
 function makeLogger(prefix) {
@@ -29,7 +29,7 @@ function makeLogger(prefix) {
   return (msg) => console.log(`[${p}] ${msg}`);
 }
 
-function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, interceptorInjectPath, logPrefix }) {
+function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, interceptorInjectPath, logPrefix, buildId }) {
   const log = makeLogger(logPrefix || "byok");
   const root = path.resolve(String(repoRoot || ""));
   const extDir = path.resolve(String(extensionDir || ""));
@@ -50,11 +50,11 @@ function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, intercep
   if (!fs.existsSync(payloadDir)) throw new Error(`payload missing: ${rel(payloadDir)}`);
   copyDir(payloadDir, extDir);
 
-  log(`patch webview assets (tool cards fallback)`);
-  patchWebviewToolUseFallback(extDir);
-
   log(`patch webview assets (history summary node slimming)`);
   patchWebviewHistorySummaryNode(extDir);
+
+  log(`patch webview asset cache bust`);
+  patchWebviewAssetCacheBust(extDir, { buildId });
 
   log(`patch package.json (commands)`);
   patchPackageJsonCommands(pkg);
