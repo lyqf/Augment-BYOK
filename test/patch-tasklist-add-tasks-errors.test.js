@@ -29,8 +29,8 @@ test("patchTasklistAddTasksErrors: patches handleBatchCreation with non-Qk diff 
     const src = [
       `class AddTasksTool{`,
       `  async handleBatchCreation(r,n){`,
-      `    let i=this._taskManager.getRootTaskUuid(r);`,
-      `    if(!i)return it("No root task found.");`,
+      `    let i=await this._taskManager.getOrCreateTaskListId(r);`,
+      `    if(!i)return it("No task list found. [TL005]");`,
       "    let o=await this._taskManager.getHydratedTask(i);",
       "    if(!o)return it(`Task with UUID ${i} not found.`);",
       "    let s=[];",

@@ -40,7 +40,7 @@ function patchTasklistAddTasksErrors(filePath) {
       const resultsVar = String(resultsCapture?.[1] || "");
       if (!resultsVar) throw new Error("tasklist add_tasks errors: results capture missing");
 
-      const errFnCapture = m[0].match(/return\s+([A-Za-z_$][\w$]*)\("No root task found\."\);/);
+      const errFnCapture = m[0].match(/return\s+([A-Za-z_$][\w$]*)\("No (?:root task|task list) found[^"]*"\);/);
       const errFnVar = String(errFnCapture?.[1] || "");
       if (!errFnVar) throw new Error("tasklist add_tasks errors: error fn capture missing");
 

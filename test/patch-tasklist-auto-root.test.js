@@ -52,3 +52,31 @@ test("patchTasklistAutoRoot: injects createNewTaskList fallback for tasklist ent
     assert.equal(out2, out1);
   });
 });
+
+test("patchTasklistAutoRoot: no-ops when upstream already auto-creates task list roots", () => {
+  withTempDir("augment-byok-task-auto-root-v2-", (dir) => {
+    const filePath = path.join(dir, "extension.js");
+    const src = [
+      `class TaskManager{`,
+      `  _rootTasksMap={};`,
+      `  createNewTaskList=async(r)=>"uuid-"+String(r||"");`,
+      `  getOrCreateTaskListId=async r=>{if(!r)return;let n=this._rootTasksMap[r];return n||(this.createNewTaskList(r))}`,
+      `}`,
+      `class ViewTaskListTool{`,
+      `  async call(r,n,i,o,s,a){try{let c=await this._taskManager.getOrCreateTaskListId(a);if(!c)return it("No task list found. [TL001]");return {plan:c}}catch{return it("x")}}`,
+      `}`
+    ].join("\n");
+    writeUtf8(filePath, src);
+
+    const r1 = patchTasklistAutoRoot(filePath);
+    assert.equal(r1.changed, true);
+    const out1 = readUtf8(filePath);
+    assert.ok(out1.includes("__augment_byok_tasklist_auto_root_patched_v1"));
+    assert.ok(out1.includes("getOrCreateTaskListId=async"));
+
+    const r2 = patchTasklistAutoRoot(filePath);
+    assert.equal(r2.changed, false);
+    const out2 = readUtf8(filePath);
+    assert.equal(out2, out1);
+  });
+});
